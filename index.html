@@ -66,11 +66,11 @@
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
   <div id="K1Transition" class="screen" style="background-image: url('images/K1.jpg');">
-  <div class="hotspot" onclick="proceedToGame()"></div>
+  <div class="hotspot" onclick="startGame()"></div>
   </div>
   <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
     <div id="permissionTip">請點擊允許「裝置方向存取」以啟用搖晃控制</div>
-    <div class="hotspot" onclick="startGame()"></div>
+    <div class="hotspot" onclick="showScreen('K1Transition')"></div>
   </div>
   <div id="gameCanvasContainer" class="screen">
     <canvas id="gameCanvas"></canvas>
@@ -140,9 +140,8 @@
     let bgImg = bgImages[0];
 
     const transitionScreens = {
-      1: "images/K1.jpg",
-      2: "images/K2.jpg",
-      3: "images/K3.jpg"
+      1: "images/K2.jpg",
+      2: "images/K3.jpg"
     };
 
     const bowlImg = new Image();
@@ -174,10 +173,6 @@
 
 
     function startGame() {
-      showScreen("K1Transition"); // 改成先顯示 K1 畫面
-    }
-    
-    function proceedToGame() {
       showScreen("gameCanvasContainer");
       requestDeviceOrientation();
       level = 1;
