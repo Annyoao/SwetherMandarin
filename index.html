@@ -65,6 +65,9 @@
   <div id="home" class="screen active" style="background-image: url('images/cover.jpg');">
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
+  <div id="K1Transition" class="screen" style="background-image: url('images/K1.png');">
+  <div class="hotspot" onclick="proceedToGame()"></div>
+  </div>
   <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
     <div id="permissionTip">請點擊允許「裝置方向存取」以啟用搖晃控制</div>
     <div class="hotspot" onclick="startGame()"></div>
@@ -171,6 +174,10 @@
 
 
     function startGame() {
+      showScreen("K1Transition"); // 改成先顯示 K1 畫面
+    }
+    
+    function proceedToGame() {
       showScreen("gameCanvasContainer");
       requestDeviceOrientation();
       level = 1;
