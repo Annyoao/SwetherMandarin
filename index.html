@@ -62,10 +62,10 @@
   </style>
 </head>
 <body>
-  <div id="home" class="screen active" style="background-image: url('images/cover.png');">
+  <div id="home" class="screen active" style="background-image: url('images/cover.jpg');">
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
-  <div id="intro" class="screen" style="background-image: url('images/intro.png');">
+  <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
     <div id="permissionTip">請點擊允許「裝置方向存取」以啟用搖晃控制</div>
     <div class="hotspot" onclick="startGame()"></div>
   </div>
@@ -130,16 +130,16 @@
       2: new Image(),
       3: new Image()
     };
-    bgImages[0].src = "images/bg0.png";
-    bgImages[1].src = "images/bg1.png";
-    bgImages[2].src = "images/bg2.png";
-    bgImages[3].src = "images/bg3.png";
+    bgImages[0].src = "images/bg0.jpg";
+    bgImages[1].src = "images/bg1.jpg";
+    bgImages[2].src = "images/bg2.jpg";
+    bgImages[3].src = "images/bg3.jpg";
     let bgImg = bgImages[0];
 
     const transitionScreens = {
-      1: "images/K1.png",
-      2: "images/K2.png",
-      3: "images/K3.png"
+      1: "images/K1.jpg",
+      2: "images/K2.jpg",
+      3: "images/K3.jpg"
     };
 
     const bowlImg = new Image();
@@ -313,7 +313,7 @@
     function showResult() {
       clearInterval(timerInterval); 
       showScreen("result");
-      const bg = score >= 20 ? "result1.png" : score >= 10 ? "result2.png" : "result3.png";
+      const bg = score >= 20 ? "result1.jpg" : score >= 10 ? "result2.jpg" : "result3.jpg";
       document.getElementById("result").style.backgroundImage = `url('images/${bg}')`;
       document.getElementById("scoreResult").innerHTML = "";
       setTimeout(() => {
