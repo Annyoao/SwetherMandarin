@@ -223,17 +223,23 @@
         food.y + food.size > basket.y
       );
     } */
-    function isColliding(food, basket) {
-  // 只取盤子上半部高度
-  const effectiveHeight = basket.height * 0.5; // 上半部
-  const by = basket.y; // 上緣位置
-  const bh = effectiveHeight; // 有效高度
+function isColliding(food, basket) {
+  // 食物底邊
+  const foodBottom = food.y + food.size;
+  // 食物中心 X
+  const foodCenterX = food.x + food.size / 2;
+
+  // 盤子上緣 Y（只算上半部或上緣）
+  const plateTop = basket.y;
+  const plateLeft = basket.x;
+  const plateRight = basket.x + basket.width;
 
   return (
-    food.x < basket.x + basket.width &&
-    food.x + food.size > basket.x &&
-    food.y < by + bh &&
-    food.y + food.size > by
+    // 食物底邊必須到達或超過盤子上緣
+    foodBottom >= plateTop &&
+    // 食物中心必須落在盤子的左右範圍內
+    foodCenterX >= plateLeft &&
+    foodCenterX <= plateRight
   );
 }
 
