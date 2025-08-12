@@ -215,14 +215,27 @@
       img.src = `images/${f.file}`;
     }
 
-    function isColliding(food, basket) {
+   /* function isColliding(food, basket) {
       return (
         food.x < basket.x + basket.width &&
         food.x + food.size > basket.x &&
         food.y < basket.y + basket.height &&
         food.y + food.size > basket.y
       );
-    }
+    } */
+    function isColliding(food, basket) {
+  // 只取盤子上半部高度
+  const effectiveHeight = basket.height * 0.5; // 上半部
+  const by = basket.y; // 上緣位置
+  const bh = effectiveHeight; // 有效高度
+
+  return (
+    food.x < basket.x + basket.width &&
+    food.x + food.size > basket.x &&
+    food.y < by + bh &&
+    food.y + food.size > by
+  );
+}
 
     function update() {
       if (!currentFood) return;
