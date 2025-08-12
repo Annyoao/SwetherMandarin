@@ -236,10 +236,10 @@ function isColliding(food, basket) {
 
   return (
     // 食物底邊必須到達或超過盤子上緣
-    foodBottom >= plateTop &&
+    foodBottom > plateTop &&
     // 食物中心必須落在盤子的左右範圍內
-    foodCenterX >= plateLeft &&
-    foodCenterX <= plateRight
+    foodCenterX > plateLeft &&
+    foodCenterX < plateRight
   );
 }
 
