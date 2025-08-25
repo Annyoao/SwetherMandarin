@@ -52,13 +52,10 @@
     }
     canvas {
       display: block;
-    }
-    canvas {
       pointer-events: none;
       z-index: -1;
       position: relative;
     }
-    
   </style>
 </head>
 <body>
@@ -66,7 +63,7 @@
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
   <div id="K1Transition" class="screen" style="background-image: url('images/K1.jpg');">
-  <div class="hotspot" onclick="startGame()"></div>
+    <div class="hotspot" onclick="startGame()"></div>
   </div>
   <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
     <div id="permissionTip">請點擊允許「裝置方向存取」以啟用搖晃控制</div>
@@ -87,33 +84,37 @@
     const bgm = new Audio('sounds/bgm.mp3');
     bgm.loop = true;
     bgm.volume = 0.2;
+
+    function createSoundPool(src, poolSize = 5) {
+      const pool = Array.from({ length: poolSize }, () => {
+        const audio = new Audio(src);
+        audio.preload = "auto";
+        return audio;
+      });
+      let current = 0;
+      return {
+        play(volume = 1) {
+          const sound = pool[current];
+          sound.currentTime = 0;
+          sound.volume = volume;
+          sound.play().catch(err => console.warn("音效播放失敗:", err));
+          current = (current + 1) % pool.length;
+        }
+      };
+    }
+
     const clickSoundPool = createSoundPool('sounds/click.mp3');
+    const goodSoundPool = createSoundPool('sounds/good.mp3');
+    const badSoundPool = createSoundPool('sounds/bad.mp3');
+    const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
+
+    // 🔊 新增：接到食物時的即時回饋音效（請放置 sounds/catch.mp3）
+    const catchSoundPool = createSoundPool('sounds/catch.mp3');
+
     function handleClickFeedback() {
       clickSoundPool.play();
       if (navigator.vibrate) navigator.vibrate(80);
     }
-    
-    function createSoundPool(src, poolSize = 5) {
-    const pool = Array.from({ length: poolSize }, () => {
-      const audio = new Audio(src);
-      audio.preload = "auto";
-      return audio;
-    });
-  
-    let current = 0;
-    return {
-      play(volume = 1) {
-        const sound = pool[current];
-        sound.currentTime = 0;
-        sound.volume = volume;
-        sound.play().catch(err => console.warn("音效播放失敗:", err));
-        current = (current + 1) % pool.length;
-      }
-    };
-  }
-    const goodSoundPool = createSoundPool('sounds/good.mp3');
-    const badSoundPool = createSoundPool('sounds/bad.mp3');
-    const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
 
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
@@ -127,12 +128,7 @@
     let bgTimeout = null;
     const permissionTip = document.getElementById("permissionTip");
 
-    const bgImages = {
-      0: new Image(),
-      1: new Image(),
-      2: new Image(),
-      3: new Image()
-    };
+    const bgImages = { 0: new Image(), 1: new Image(), 2: new Image(), 3: new Image() };
     bgImages[0].src = "images/bg0.jpg";
     bgImages[1].src = "images/bg1.jpg";
     bgImages[2].src = "images/bg2.jpg";
@@ -171,7 +167,6 @@
       document.getElementById(id).classList.add("active");
     }
 
-
     function startGame() {
       showScreen("gameCanvasContainer");
       requestDeviceOrientation();
@@ -195,7 +190,7 @@
         foodQueue.push(incorrectFoods[Math.floor(Math.random() * incorrectFoods.length)]);
       }
       spawnFood();
-      startLevelTimer(); // ← 加這行，開始計時
+      startLevelTimer(); // 開始計時
     }
 
     function spawnFood() {
@@ -215,48 +210,42 @@
       img.src = `images/${f.file}`;
     }
 
-   /* function isColliding(food, basket) {
+    // 只要食物底邊到盤子上緣且中心在盤子左右範圍，就算接到
+    function isColliding(food, basket) {
+      const foodBottom = food.y + food.size;
+      const foodCenterX = food.x + food.size / 2;
+      const plateTop = basket.y;
+      const plateLeft = basket.x;
+      const plateRight = basket.x + basket.width;
+
       return (
-        food.x < basket.x + basket.width &&
-        food.x + food.size > basket.x &&
-        food.y < basket.y + basket.height &&
-        food.y + food.size > basket.y
+        foodBottom > plateTop &&
+        foodCenterX > plateLeft &&
+        foodCenterX < plateRight
       );
-    } */
-function isColliding(food, basket) {
-  // 食物底邊
-  const foodBottom = food.y + food.size;
-  // 食物中心 X
-  const foodCenterX = food.x + food.size / 2;
-
-  // 盤子上緣 Y（只算上半部或上緣）
-  const plateTop = basket.y;
-  const plateLeft = basket.x;
-  const plateRight = basket.x + basket.width;
-
-  return (
-    // 食物底邊必須到達或超過盤子上緣
-    foodBottom > plateTop &&
-    // 食物中心必須落在盤子的左右範圍內
-    foodCenterX > plateLeft &&
-    foodCenterX < plateRight
-  );
-}
+    }
 
     function update() {
       if (!currentFood) return;
       currentFood.y += currentFood.speed;
       const caught = isColliding(currentFood, basket);
       const missed = currentFood.y > canvas.height;
+
       if (caught || missed) {
         if (caught) handleCatch(currentFood);
+        // 若你也想要掉落音效，可在這裡加上 missSoundPool.play()
         currentFood = null;
         if (foodQueue.length > 0) spawnFood();
         else showTransition();
       }
     }
 
+    // ✏️ 修改：接到瞬間先給通用回饋音效與輕震，再播放原本的分類音效
     function handleCatch(food) {
+      // 🔊 新增：通用接取回饋（即時）
+      catchSoundPool.play(0.9);
+      if (navigator.vibrate) navigator.vibrate(30);
+
       if (food.health === 'bad') {
         score -= 2;
         stats[level].bad++;
@@ -293,22 +282,22 @@ function isColliding(food, basket) {
       ctx.font = "bold 24px sans-serif";
       ctx.fillStyle = "black";
       ctx.fillText(`關卡 ${level} 分數:${score}`, 10, 40);
-      // 顯示右上角倒數計時
+      // 右上角倒數計時
       ctx.textAlign = "right";
       ctx.fillText(`剩餘時間: ${timeLeft}s`, canvas.width - 10, 40);
-      ctx.textAlign = "left"; // 恢復原本對齊方式
+      ctx.textAlign = "left";
     }
 
     function startLevelTimer() {
       timeLeft = levelTime;
-      clearInterval(timerInterval); // 清除舊計時器（若有）
+      clearInterval(timerInterval);
       timerInterval = setInterval(() => {
         timeLeft--;
         if (timeLeft <= 0) {
           clearInterval(timerInterval);
           showTransition(); // 時間到，自動換關或結束
         }
-      }, 1000); // 每秒遞減
+      }, 1000);
     }
 
     function loop() {
@@ -354,7 +343,9 @@ function isColliding(food, basket) {
             permissionTip.style.display = 'none';
           }
         }).catch(() => permissionTip.textContent = "裝置方向權限未開啟");
-      } else window.addEventListener("deviceorientation", handleOrientation);
+      } else {
+        window.addEventListener("deviceorientation", handleOrientation);
+      }
     }
 
     function handleOrientation(event) {
