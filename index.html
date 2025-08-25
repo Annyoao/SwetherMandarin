@@ -85,21 +85,46 @@
     bgm.loop = true;
     bgm.volume = 0.2;
 
-    function createSoundPool(src, poolSize = 5) {
+    // ★ 修正：更穩定的音效池（挑空閒音軌 + 安全重置 + 失敗重試 + 預熱支援）
+    function createSoundPool(src, poolSize = 6) {
       const pool = Array.from({ length: poolSize }, () => {
         const audio = new Audio(src);
         audio.preload = "auto";
+        // audio.crossOrigin = "anonymous"; // 若音檔不同網域且允許，才需要
         return audio;
       });
-      let current = 0;
+
+      function getIdleAudio() {
+        for (const a of pool) {
+          if (a.paused || a.ended) return a;
+        }
+        return pool[0]; // 全部在播時覆蓋第一個
+      }
+
+      async function safePlay(a, volume) {
+        try {
+          a.pause();
+          a.currentTime = 0.001; // iOS 對 0 較不穩，給極小值
+          a.volume = volume;
+          await a.play();
+        } catch (err) {
+          try {
+            a.pause();
+            a.currentTime = 0.001;
+            a.volume = volume;
+            await a.play();
+          } catch (err2) {
+            console.warn("音效播放失敗:", err2);
+          }
+        }
+      }
+
       return {
         play(volume = 1) {
-          const sound = pool[current];
-          sound.currentTime = 0;
-          sound.volume = volume;
-          sound.play().catch(err => console.warn("音效播放失敗:", err));
-          current = (current + 1) % pool.length;
-        }
+          const a = getIdleAudio();
+          safePlay(a, volume);
+        },
+        _all() { return pool; } // 給預熱用
       };
     }
 
@@ -107,13 +132,29 @@
     const goodSoundPool = createSoundPool('sounds/good.mp3');
     const badSoundPool = createSoundPool('sounds/bad.mp3');
     const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
+    const catchSoundPool = createSoundPool('sounds/catch.mp3'); // 接到食物時的即時回饋音
 
-    // 🔊 新增：接到食物時的即時回饋音效（請放置 sounds/catch.mp3）
-    const catchSoundPool = createSoundPool('sounds/catch.mp3');
+    // ★ 新增：音效預熱（在第一次用戶手勢中靜音播/停，解鎖播放限制）
+    let sfxWarmedUp = false;
+    function warmUpSoundPools() {
+      if (sfxWarmedUp) return;
+      sfxWarmedUp = true;
+      const pools = [clickSoundPool, goodSoundPool, badSoundPool, wrongSoundPool, catchSoundPool];
+      pools.forEach(pool => {
+        pool._all().forEach(a => {
+          a.volume = 0.0001;
+          a.play().then(() => {
+            a.pause();
+            a.currentTime = 0.001;
+          }).catch(() => { /* 忽略預熱失敗 */ });
+        });
+      });
+    }
 
     function handleClickFeedback() {
       clickSoundPool.play();
       if (navigator.vibrate) navigator.vibrate(80);
+      warmUpSoundPools(); // ★ 第一次點擊時預熱所有音效池
     }
 
     const canvas = document.getElementById("gameCanvas");
@@ -121,7 +162,7 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const basket = { x: canvas.width / 2 - 40, y: canvas.height - 100, width: 80, height: 10 }; //調整盤子位置
+    const basket = { x: canvas.width / 2 - 40, y: canvas.height - 100, width: 80, height: 10 }; // 調整盤子位置
     let currentFood = null;
     let foodQueue = [], score = 0, level = 1;
     let stats = { 1: { good: 0, bad: 0 }, 2: { good: 0, bad: 0 }, 3: { good: 0, bad: 0 } };
@@ -135,10 +176,7 @@
     bgImages[3].src = "images/bg3.jpg";
     let bgImg = bgImages[0];
 
-    const transitionScreens = {
-      1: "images/K2.jpg",
-      2: "images/K3.jpg"
-    };
+    const transitionScreens = { 1: "images/K2.jpg", 2: "images/K3.jpg" };
 
     const bowlImg = new Image();
     bowlImg.src = 'images/bowl.png';
@@ -175,6 +213,7 @@
       prepareLevel();
       loop();
       bgm.play().catch(() => console.log("音樂播放失敗"));
+      warmUpSoundPools(); // ★ 保險：開始遊戲時再嘗試預熱一次（內部有防重）
     }
 
     function prepareLevel() {
@@ -190,7 +229,7 @@
         foodQueue.push(incorrectFoods[Math.floor(Math.random() * incorrectFoods.length)]);
       }
       spawnFood();
-      startLevelTimer(); // 開始計時
+      startLevelTimer();
     }
 
     function spawnFood() {
@@ -210,25 +249,43 @@
       img.src = `images/${f.file}`;
     }
 
-// ===== 命中判定難度設定 =====
-// 可選 'easy' | 'normal' | 'hard' | 'custom'
-let hitboxDifficulty = 'hard';
+    // ===== 命中判定難度設定 =====
+    // 可選 'easy' | 'normal' | 'hard' | 'custom'
+    let hitboxDifficulty = 'hard';
 
-// 預設值表（可依喜好調整）
-const HITBOX_PRESETS = {
-  easy:   { shrinkX: 5,  verticalTolerance: 40 },  // 最寬鬆
-  normal: { shrinkX: 15, verticalTolerance: 25 },
-  hard:   { shrinkX: 25, verticalTolerance: 15 },  // 最嚴格
-};
+    // 預設值表（可依喜好調整）
+    const HITBOX_PRESETS = {
+      easy:   { shrinkX: 5,  verticalTolerance: 40 },  // 最寬鬆
+      normal: { shrinkX: 15, verticalTolerance: 25 },
+      hard:   { shrinkX: 25, verticalTolerance: 15 },  // 最嚴格
+    };
 
-// 若想完全自訂，設為 'custom' 並在此調數字
-const HITBOX_CUSTOM = { shrinkX: 20, verticalTolerance: 20 };
+    // 若想完全自訂，設為 'custom' 並在此調數字
+    const HITBOX_CUSTOM = { shrinkX: 20, verticalTolerance: 20 };
 
-// 取得當前使用的判定參數
-function getHitboxParams() {
-  if (hitboxDifficulty === 'custom') return HITBOX_CUSTOM;
-  return HITBOX_PRESETS[hitboxDifficulty] || HITBOX_PRESETS.normal;
-}
+    function getHitboxParams() {
+      if (hitboxDifficulty === 'custom') return HITBOX_CUSTOM;
+      return HITBOX_PRESETS[hitboxDifficulty] || HITBOX_PRESETS.normal;
+    }
+
+    // ★ 補上：縮小判定區域版本的碰撞函式（左右收窄 + 垂直容差）
+    function isColliding(food, basket) {
+      const { shrinkX, verticalTolerance } = getHitboxParams();
+
+      const foodBottom = food.y + food.size;
+      const foodCenterX = food.x + food.size / 2;
+
+      const plateTop = basket.y;
+      const plateLeft = basket.x + shrinkX;
+      const plateRight = basket.x + basket.width - shrinkX;
+
+      return (
+        foodBottom >= plateTop &&
+        foodBottom <= plateTop + verticalTolerance &&
+        foodCenterX > plateLeft &&
+        foodCenterX < plateRight
+      );
+    }
 
     function update() {
       if (!currentFood) return;
@@ -238,16 +295,14 @@ function getHitboxParams() {
 
       if (caught || missed) {
         if (caught) handleCatch(currentFood);
-        // 若你也想要掉落音效，可在這裡加上 missSoundPool.play()
         currentFood = null;
         if (foodQueue.length > 0) spawnFood();
         else showTransition();
       }
     }
 
-    // ✏️ 修改：接到瞬間先給通用回饋音效與輕震，再播放原本的分類音效
+    // 接到瞬間：通用回饋音 + 輕震，再播放分類音效
     function handleCatch(food) {
-      // 🔊 新增：通用接取回饋（即時）
       catchSoundPool.play(0.9);
       if (navigator.vibrate) navigator.vibrate(30);
 
@@ -281,13 +336,12 @@ function getHitboxParams() {
 
     function draw() {
       if (bgImg.complete) ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-      basket.width = 120; basket.height = 80;
+      basket.width = 120; basket.height = 80; // 與視覺一致
       if (bowlImg.complete) ctx.drawImage(bowlImg, basket.x, basket.y, basket.width, basket.height);
       if (currentFood?.image?.complete) ctx.drawImage(currentFood.image, currentFood.x, currentFood.y, currentFood.size, currentFood.size);
       ctx.font = "bold 24px sans-serif";
       ctx.fillStyle = "black";
       ctx.fillText(`關卡 ${level} 分數:${score}`, 10, 40);
-      // 右上角倒數計時
       ctx.textAlign = "right";
       ctx.fillText(`剩餘時間: ${timeLeft}s`, canvas.width - 10, 40);
       ctx.textAlign = "left";
@@ -300,7 +354,7 @@ function getHitboxParams() {
         timeLeft--;
         if (timeLeft <= 0) {
           clearInterval(timerInterval);
-          showTransition(); // 時間到，自動換關或結束
+          showTransition();
         }
       }, 1000);
     }
@@ -312,7 +366,7 @@ function getHitboxParams() {
     }
 
     function showTransition() {
-      clearInterval(timerInterval); 
+      clearInterval(timerInterval);
       if (level < 3) {
         document.getElementById("betweenLevel").style.backgroundImage = `url('${transitionScreens[level]}')`;
         showScreen("betweenLevel");
@@ -326,7 +380,7 @@ function getHitboxParams() {
     }
 
     function showResult() {
-      clearInterval(timerInterval); 
+      clearInterval(timerInterval);
       showScreen("result");
       const bg = score >= 20 ? "result1.jpg" : score >= 10 ? "result2.jpg" : "result3.jpg";
       document.getElementById("result").style.backgroundImage = `url('images/${bg}')`;
