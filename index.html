@@ -280,8 +280,8 @@
       const plateRight = basket.x + basket.width - shrinkX;
 
       return (
-        foodBottom >= plateTop &&
-        foodBottom <= plateTop + verticalTolerance &&
+        foodBottom > plateTop &&
+        foodBottom < plateTop + verticalTolerance &&
         foodCenterX > plateLeft &&
         foodCenterX < plateRight
       );
