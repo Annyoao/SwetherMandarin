@@ -121,26 +121,26 @@
         return pool[0]; // 全部在播時覆蓋第一個
       }
 
-      // 播放前強制解除靜音，避免音軌留在 muted 狀態
-      async function safePlay(a, volume) {
-        try {
-          a.pause();
-          a.currentTime = 0.001; // iOS 對 0 較不穩
-          a.muted = false;
-          a.volume = volume;
-          await a.play();
-        } catch (err) {
-          try {
-            a.pause();
-            a.currentTime = 0.001;
-            a.muted = false;
-            a.volume = volume;
-            await a.play();
-          } catch (err2) {
-            console.warn("音效播放失敗:", err2);
-          }
-        }
-      }
+     async function safePlay(a, volume) {
+  try {
+    // 如果正在播放，不要強制中斷 → 直接建立新的 Audio
+    if (!a.paused && !a.ended) {
+      const clone = a.cloneNode();  // 複製一個新的音軌
+      clone.volume = volume;
+      clone.muted = false;
+      await clone.play();
+      return;
+    }
+
+    // 如果空閒才重置
+    a.currentTime = 0;
+    a.volume = volume;
+    a.muted = false;
+    await a.play();
+  } catch (err) {
+    console.warn("音效播放失敗:", err);
+  }
+}
 
       return {
         play(volume = 1) {
