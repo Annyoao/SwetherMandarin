@@ -277,21 +277,27 @@ function preloadAudio(audioList, callback) {
 
 
 function startGame() {
-  showScreen("loading"); // 先顯示 loading 畫面
-      
-  // 收集所有需要預載的音訊
-  const allAudios = [
-    bgm,
-    ...clickSoundPool._all(),
-    ...goodSoundPool._all(),
-    ...badSoundPool._all(),
-    ...wrongSoundPool._all()
-  ];
+  showScreen("loading"); // 顯示 loading 畫面
+  const loadingText = document.getElementById("loadingText");
+  loadingText.textContent = "載入背景音樂中...";
 
-  // 預載完成後才進入遊戲
-  preloadAudio(allAudios, () => {
+  // 只強制等 BGM，其他音效丟給 preload
+  bgm.addEventListener("canplaythrough", () => {
+    console.log("🎵 BGM 已載入完成");
+    loadingText.textContent = "載入完成，開始遊戲！";
+
+    // 預載其他音效（不影響流程）
+    const allSfx = [
+      ...clickSoundPool._all(),
+      ...goodSoundPool._all(),
+      ...badSoundPool._all(),
+      ...wrongSoundPool._all()
+    ];
+    allSfx.forEach(a => { try { a.load(); } catch(e){} });
     warmUpSoundPools();
-    unlockAudioOnce(); // ✅ 建議放在這裡，確保互動後才執行
+
+    // ✅ 正式開始遊戲
+    unlockAudioOnce();
     showScreen("gameCanvasContainer");
     requestDeviceOrientation();
     level = 1;
@@ -299,7 +305,10 @@ function startGame() {
     prepareLevel();
     loop();
     bgm.play().catch(() => console.log("音樂播放失敗"));
-  });
+  }, { once: true });
+
+  // 嘗試觸發 BGM 載入
+  try { bgm.load(); } catch(e) {}
 }
 
     function prepareLevel() {
