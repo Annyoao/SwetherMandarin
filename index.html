@@ -94,13 +94,12 @@
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
         const ctx = new AC();
-        await ctx.resume();               // 需要在使用者互動後呼叫
+        await ctx.resume();               // 需在使用者互動後呼叫
         const buffer = ctx.createBuffer(1, 1, 22050); // 1 個樣本，完全無聲
         const src = ctx.createBufferSource();
         src.buffer = buffer;
         src.connect(ctx.destination);
         src.start(0);                     // 播放無聲 1-sample
-        // 很快關掉即可（避免佔資源）
         setTimeout(() => { try { ctx.close(); } catch(e){} }, 120);
       } catch (e) {
         console.log('unlockAudioOnce 失敗但可忽略：', e);
@@ -122,7 +121,7 @@
         return pool[0]; // 全部在播時覆蓋第一個
       }
 
-      // ✅ 播放前強制解除靜音，避免音軌留在 muted 狀態
+      // 播放前強制解除靜音，避免音軌留在 muted 狀態
       async function safePlay(a, volume) {
         try {
           a.pause();
@@ -157,10 +156,9 @@
     }
 
     const clickSoundPool = createSoundPool('sounds/click.mp3');
-    const goodSoundPool  = createSoundPool('sounds/good.mp3');
-    const badSoundPool   = createSoundPool('sounds/bad.mp3');
-    const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
-    // ⚠️ 沒有 catchSoundPool（已移除）
+    const goodSoundPool   = createSoundPool('sounds/good.mp3');   // ✅ 正確音效（檔名依你提供）
+    const badSoundPool   = createSoundPool('sounds/bad.mp3');   // ❌ 不健康
+    const wrongSoundPool = createSoundPool('sounds/wrong.mp3'); // ⚠️ 順序不對
 
     // 🔇 預熱旗標（不再播放，只做預載 load）
     let sfxWarmedUp = false;
@@ -310,16 +308,6 @@
       );
     }
 
-    // ====== 簡易 SFX 冷卻（避免同幀或極短時間內連爆） ======
-    let sfxCooldownAt = 0;
-    const SFX_COOLDOWN_MS = 60;
-    function playSfx(pool, vol = 1) {
-      const now = performance.now();
-      if (now - sfxCooldownAt < SFX_COOLDOWN_MS) return;
-      sfxCooldownAt = now;
-      pool.play(vol);
-    }
-
     function update() {
       if (!currentFood) return;
       currentFood.y += currentFood.speed;
@@ -334,7 +322,7 @@
       }
     }
 
-    // ✅ 僅依情境播放不同音效（成功／不健康／非目標），不再播放通用接到音
+    // ✅ 每次接到食物都必定觸發音效（無全域冷卻）
     function handleCatch(food) {
       if (navigator.vibrate) navigator.vibrate(30);
 
@@ -342,7 +330,7 @@
         score -= 2;
         stats[level].bad++;
         bgImg = bgImages[3];
-        playSfx(badSoundPool);      // 不健康 → 錯誤音（重）
+        badSoundPool.play(1);          // ❌ 不健康 → 錯誤音
       } else if (
         (level === 1 && food.type === 'meat') ||
         (level === 2 && food.type === 'vegetable') ||
@@ -351,12 +339,12 @@
         score += 2;
         stats[level].good++;
         bgImg = bgImages[1];
-        playSfx(goodSoundPool);     // 本關健康目標 → 成功音
+        goodSoundPool.play(1);          // ✅ 本關健康目標 → 正確音（good.mp3）
       } else {
         score -= 1;
         stats[level].bad++;
         bgImg = bgImages[2];
-        playSfx(wrongSoundPool);    // 健康但非目標 → 接錯音（輕）
+        wrongSoundPool.play(1);        // ⚠️ 健康但非目標 → 順序不對
       }
 
       if (bgTimeout) clearTimeout(bgTimeout);
