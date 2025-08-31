@@ -100,16 +100,19 @@
         return pool[0]; // 全部在播時覆蓋第一個
       }
 
+      // ✅ 修正 B：播放前強制解除靜音，避免音軌留在 muted 狀態
       async function safePlay(a, volume) {
         try {
           a.pause();
           a.currentTime = 0.001; // iOS 對 0 較不穩
+          a.muted = false;       // 關鍵：確保不是靜音
           a.volume = volume;
           await a.play();
         } catch (err) {
           try {
             a.pause();
             a.currentTime = 0.001;
+            a.muted = false;     // 再強制一次
             a.volume = volume;
             await a.play();
           } catch (err2) {
@@ -133,22 +136,28 @@
     const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
     // ⚠️ 已移除 catchSoundPool：不再播放通用接到音，以避免與情境音疊加
 
-    // 🔇 靜音預熱：完全不會發聲，只做解鎖
+    // 🔇 靜音預熱旗標
     let sfxWarmedUp = false;
+
+    // ✅ 修正 A：預熱改成「非靜音、音量 0」的無聲播放，再暫停
     function warmUpSoundPools() {
       if (sfxWarmedUp) return;
       sfxWarmedUp = true;
-      const pools = [clickSoundPool, goodSoundPool, badSoundPool, wrongSoundPool]; // ← 移除了 catchSoundPool
+      const pools = [clickSoundPool, goodSoundPool, badSoundPool, wrongSoundPool];
       pools.forEach(pool => {
         pool._all().forEach(a => {
           const prevMuted = a.muted;
           const prevVol = a.volume;
-          a.muted = true;     // 預熱時強制靜音
+
+          // 關鍵：非靜音 + 音量 0（幾乎無聲，但符合解鎖條件）
+          a.muted = false;
           a.volume = 0;
+
           a.play().then(() => {
             a.pause();
             a.currentTime = 0.001;
-            a.muted = prevMuted; // 還原狀態
+            // 還原原本設定
+            a.muted = prevMuted;
             a.volume = prevVol;
           }).catch(() => {
             a.muted = prevMuted;
@@ -162,7 +171,6 @@
       // 若不希望按鈕有聲音，註解下一行
       clickSoundPool.play();
       if (navigator.vibrate) navigator.vibrate(80);
-      // 不在此預熱，避免早期多次觸發時機
     }
 
     const canvas = document.getElementById("gameCanvas");
@@ -190,21 +198,22 @@
     bowlImg.src = 'images/bowl.png';
 
     const allFoods = [
-      { file: "GM1.png", type: "meat", health: "good" },
-      { file: "GM3.png", type: "meat", health: "good" },
-      { file: "GM4.png", type: "meat", health: "good" },
-      { file: "BM2.png", type: "meat", health: "bad" },
-      { file: "BM3.png", type: "meat", health: "bad" },
-      { file: "GV1.png", type: "vegetable", health: "good" },
-      { file: "GV2.png", type: "vegetable", health: "good" },
-      { file: "GV3.png", type: "vegetable", health: "good" },
-      { file: "GV4.png", type: "vegetable", health: "good" },
-      { file: "GV5.png", type: "vegetable", health: "good" },
+      { file: "GM1.png", type: "meat",       health: "good" },
+      { file: "GM3.png", type: "meat",       health: "good" },
+      { file: "GM4.png", type: "meat",       health: "good" },
+      { file: "GM5.png", type: "meat",       health: "good" },
+      { file: "BM2.png", type: "meat",       health: "bad"  },
+      { file: "BM3.png", type: "meat",       health: "bad"  },
+      { file: "GV1.png", type: "vegetable",  health: "good" },
+      { file: "GV2.png", type: "vegetable",  health: "good" },
+      { file: "GV3.png", type: "vegetable",  health: "good" },
+      { file: "GV4.png", type: "vegetable",  health: "good" },
+      { file: "GV5.png", type: "vegetable",  health: "good" },
       { file: "GStrach1.png", type: "rice",  health: "good" },
       { file: "GStrach3.png", type: "rice",  health: "good" },
-      { file: "BStrach1.png", type: "rice",  health: "bad" },
-      { file: "BStrach2.png", type: "rice",  health: "bad" },
-      { file: "BStrach3.png", type: "rice",  health: "bad" },
+      { file: "BStrach1.png", type: "rice",  health: "bad"  },
+      { file: "BStrach2.png", type: "rice",  health: "bad"  },
+      { file: "BStrach3.png", type: "rice",  health: "bad"  },
     ];
 
     function showScreen(id) {
@@ -219,16 +228,17 @@
       score = 0;
       prepareLevel();
       loop();
+      // 放在使用者互動之後觸發，解鎖自動播放
       bgm.play().catch(() => console.log("音樂播放失敗"));
-      warmUpSoundPools(); // ✅ 只在開始遊戲時做一次靜音預熱
+      warmUpSoundPools(); // ✅ 只在開始遊戲時做一次預熱（非靜音 + 音量 0）
     }
 
     function prepareLevel() {
       foodQueue = [];
       const correctFoods = allFoods.filter(f =>
-        (level === 1 && f.type === 'meat'       && f.health === 'good') ||
-        (level === 2 && f.type === 'vegetable'  && f.health === 'good') ||
-        (level === 3 && f.type === 'rice'       && f.health === 'good')
+        (level === 1 && f.type === 'meat'      && f.health === 'good') ||
+        (level === 2 && f.type === 'vegetable' && f.health === 'good') ||
+        (level === 3 && f.type === 'rice'      && f.health === 'good')
       );
       const incorrectFoods = allFoods.filter(f => !correctFoods.includes(f));
       for (let i = 0; i < 10; i++) {
@@ -273,19 +283,25 @@
       return HITBOX_PRESETS[hitboxDifficulty] || HITBOX_PRESETS.normal;
     }
 
-   function isColliding(food, basket) {
-  const marginX = 15; // 左右縮小 15px
-  const foodBottom = food.y + food.size;
-  const foodCenterX = food.x + food.size / 2;
+    // 縮小判定區域（左右收窄 + 垂直容差）
+    function isColliding(food, basket) {
+      const { shrinkX, verticalTolerance } = getHitboxParams();
 
-  return (
-    // 食物的底邊必須「超過」盤子上緣
-    foodBottom >= basket.y &&
-    // 食物中心點要在盤子寬度內（收窄後）
-    foodCenterX > basket.x + marginX &&
-    foodCenterX < basket.x + basket.width - marginX
-  );
-}
+      const foodBottom = food.y + food.size;
+      const foodCenterX = food.x + food.size / 2;
+
+      const plateTop = basket.y;
+      const plateLeft = basket.x + shrinkX;
+      const plateRight = basket.x + basket.width - shrinkX;
+
+      return (
+        foodBottom >= plateTop &&
+        foodBottom <= plateTop + verticalTolerance &&
+        foodCenterX > plateLeft &&
+        foodCenterX < plateRight
+      );
+    }
+
     function update() {
       if (!currentFood) return;
       currentFood.y += currentFood.speed;
