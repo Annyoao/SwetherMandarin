@@ -59,26 +59,34 @@
   </style>
 </head>
 <body>
-  <div id="loading" class="screen active" 
+  <!-- 🚫 一開始不要 active -->
+  <div id="loading" class="screen" 
      style="background: black; color: white; display: flex; justify-content: center; align-items: center; flex-direction: column;">
-  <div id="loadingText" style="font-size: 28px;">載入中...</div>
+    <div id="loadingText" style="font-size: 28px;">載入中...</div>
   </div>
-  <div id="home" class="screen" style="background-image: url('images/cover.jpg');">
-  <div class="hotspot" onclick="showScreen('intro')"></div>
+
+  <!-- ✅ 初始畫面顯示 home -->
+  <div id="home" class="screen active" style="background-image: url('images/cover.jpg');">
+    <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
+
   <div id="K1Transition" class="screen" style="background-image: url('images/K1.jpg');">
     <div class="hotspot" onclick="startGame()"></div>
   </div>
+
   <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
     <div id="permissionTip">請點擊允許「裝置方向存取」以啟用搖晃控制</div>
     <div class="hotspot" onclick="showScreen('K1Transition')"></div>
   </div>
+
   <div id="gameCanvasContainer" class="screen">
     <canvas id="gameCanvas"></canvas>
   </div>
+
   <div id="betweenLevel" class="screen">
     <div class="hotspot" onclick="nextLevelStart()"></div>
   </div>
+
   <div id="result" class="screen">
     <div id="scoreResult"></div>
     <div class="hotspot" onclick="location.reload()"></div>
