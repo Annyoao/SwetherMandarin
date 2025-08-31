@@ -59,6 +59,10 @@
   </style>
 </head>
 <body>
+  <div id="loading" class="screen active" 
+     style="background: black; color: white; display: flex; justify-content: center; align-items: center; flex-direction: column;">
+  <div id="loadingText" style="font-size: 28px;">載入中...</div>
+  </div>
   <div id="home" class="screen active" style="background-image: url('images/cover.jpg');">
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
@@ -229,7 +233,47 @@
       document.getElementById(id).classList.add("active");
     }
 
+    function preloadAudio(audioList, callback) {
+  let loadedCount = 0;
+  const total = audioList.length;
+  const loadingText = document.getElementById("loadingText");
+
+  audioList.forEach(audio => {
+    // 當音檔可以順暢播放時，計數+1
+    audio.addEventListener("canplaythrough", () => {
+      loadedCount++;
+      loadingText.textContent = `載入中... ${loadedCount}/${total}`;
+      if (loadedCount === total) {
+        callback();
+      }
+    }, { once: true });
+  });
+}
+
     function startGame() {
+      showScreen("loading"); // 先顯示 loading 畫面
+      
+  // 收集所有需要預載的音訊
+  const allAudios = [
+    bgm,
+    ...clickSoundPool._all(),
+    ...goodSoundPool._all(),
+    ...badSoundPool._all(),
+    ...wrongSoundPool._all()
+  ];
+
+  // 預載完成後才進入遊戲
+  preloadAudio(allAudios, () => {
+    warmUpSoundPools();
+    showScreen("gameCanvasContainer");
+    requestDeviceOrientation();
+    level = 1;
+    score = 0;
+    prepareLevel();
+    loop();
+    bgm.play().catch(() => console.log("音樂播放失敗"));
+  });
+      
       showScreen("gameCanvasContainer");
       requestDeviceOrientation();
       level = 1;
