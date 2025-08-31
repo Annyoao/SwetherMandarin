@@ -250,8 +250,8 @@
   });
 }
 
-    function startGame() {
-      showScreen("loading"); // 先顯示 loading 畫面
+function startGame() {
+  showScreen("loading"); // 先顯示 loading 畫面
       
   // 收集所有需要預載的音訊
   const allAudios = [
@@ -265,6 +265,7 @@
   // 預載完成後才進入遊戲
   preloadAudio(allAudios, () => {
     warmUpSoundPools();
+    unlockAudioOnce(); // ✅ 建議放在這裡，確保互動後才執行
     showScreen("gameCanvasContainer");
     requestDeviceOrientation();
     level = 1;
@@ -273,21 +274,7 @@
     loop();
     bgm.play().catch(() => console.log("音樂播放失敗"));
   });
-      
-      showScreen("gameCanvasContainer");
-      requestDeviceOrientation();
-      level = 1;
-      score = 0;
-      prepareLevel();
-      loop();
-
-      // 先進行一次全域音訊解鎖（無聲 Buffer）
-      unlockAudioOnce();
-      // 接著再播放 BGM（皆在使用者互動後進行）
-      bgm.play().catch(() => console.log("音樂播放失敗"));
-      // 只做預載，不播放 → 不會在一開始跑出一堆音效
-      warmUpSoundPools();
-    }
+}
 
     function prepareLevel() {
       foodQueue = [];
