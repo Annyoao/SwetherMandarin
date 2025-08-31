@@ -52,13 +52,10 @@
     }
     canvas {
       display: block;
-    }
-    canvas {
       pointer-events: none;
       z-index: -1;
       position: relative;
     }
-    
   </style>
 </head>
 <body>
@@ -66,7 +63,7 @@
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
   <div id="K1Transition" class="screen" style="background-image: url('images/K1.jpg');">
-  <div class="hotspot" onclick="startGame()"></div>
+    <div class="hotspot" onclick="startGame()"></div>
   </div>
   <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
     <div id="permissionTip">請點擊允許「裝置方向存取」以啟用搖晃控制</div>
@@ -87,62 +84,107 @@
     const bgm = new Audio('sounds/bgm.mp3');
     bgm.loop = true;
     bgm.volume = 0.2;
+
+    // 穩定的音效池：挑空閒音軌 + 安全重置 + 失敗重試
+    function createSoundPool(src, poolSize = 6) {
+      const pool = Array.from({ length: poolSize }, () => {
+        const audio = new Audio(src);
+        audio.preload = "auto";
+        return audio;
+      });
+
+      function getIdleAudio() {
+        for (const a of pool) {
+          if (a.paused || a.ended) return a;
+        }
+        return pool[0]; // 全部在播時覆蓋第一個
+      }
+
+      async function safePlay(a, volume) {
+        try {
+          a.pause();
+          a.currentTime = 0.001; // iOS 對 0 較不穩
+          a.volume = volume;
+          await a.play();
+        } catch (err) {
+          try {
+            a.pause();
+            a.currentTime = 0.001;
+            a.volume = volume;
+            await a.play();
+          } catch (err2) {
+            console.warn("音效播放失敗:", err2);
+          }
+        }
+      }
+
+      return {
+        play(volume = 1) {
+          const a = getIdleAudio();
+          safePlay(a, volume);
+        },
+        _all() { return pool; } // 給預熱用
+      };
+    }
+
     const clickSoundPool = createSoundPool('sounds/click.mp3');
+    const goodSoundPool  = createSoundPool('sounds/good.mp3');
+    const badSoundPool   = createSoundPool('sounds/bad.mp3');
+    const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
+    // ⚠️ 已移除 catchSoundPool：不再播放通用接到音，以避免與情境音疊加
+
+    // 🔇 靜音預熱：完全不會發聲，只做解鎖
+    let sfxWarmedUp = false;
+    function warmUpSoundPools() {
+      if (sfxWarmedUp) return;
+      sfxWarmedUp = true;
+      const pools = [clickSoundPool, goodSoundPool, badSoundPool, wrongSoundPool]; // ← 移除了 catchSoundPool
+      pools.forEach(pool => {
+        pool._all().forEach(a => {
+          const prevMuted = a.muted;
+          const prevVol = a.volume;
+          a.muted = true;     // 預熱時強制靜音
+          a.volume = 0;
+          a.play().then(() => {
+            a.pause();
+            a.currentTime = 0.001;
+            a.muted = prevMuted; // 還原狀態
+            a.volume = prevVol;
+          }).catch(() => {
+            a.muted = prevMuted;
+            a.volume = prevVol;
+          });
+        });
+      });
+    }
+
     function handleClickFeedback() {
+      // 若不希望按鈕有聲音，註解下一行
       clickSoundPool.play();
       if (navigator.vibrate) navigator.vibrate(80);
+      // 不在此預熱，避免早期多次觸發時機
     }
-    
-    function createSoundPool(src, poolSize = 5) {
-    const pool = Array.from({ length: poolSize }, () => {
-      const audio = new Audio(src);
-      audio.preload = "auto";
-      return audio;
-    });
-  
-    let current = 0;
-    return {
-      play(volume = 1) {
-        const sound = pool[current];
-        sound.currentTime = 0;
-        sound.volume = volume;
-        sound.play().catch(err => console.warn("音效播放失敗:", err));
-        current = (current + 1) % pool.length;
-      }
-    };
-  }
-    const goodSoundPool = createSoundPool('sounds/good.mp3');
-    const badSoundPool = createSoundPool('sounds/bad.mp3');
-    const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
 
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const basket = { x: canvas.width / 2 - 30, y: canvas.height - 100, width: 70, height: 10 }; //調整盤子位置
+    const basket = { x: canvas.width / 2 - 40, y: canvas.height - 80, width: 80, height: 10 }; // 調整盤子位置
     let currentFood = null;
     let foodQueue = [], score = 0, level = 1;
     let stats = { 1: { good: 0, bad: 0 }, 2: { good: 0, bad: 0 }, 3: { good: 0, bad: 0 } };
     let bgTimeout = null;
     const permissionTip = document.getElementById("permissionTip");
 
-    const bgImages = {
-      0: new Image(),
-      1: new Image(),
-      2: new Image(),
-      3: new Image()
-    };
+    const bgImages = { 0: new Image(), 1: new Image(), 2: new Image(), 3: new Image() };
     bgImages[0].src = "images/bg0.jpg";
     bgImages[1].src = "images/bg1.jpg";
     bgImages[2].src = "images/bg2.jpg";
     bgImages[3].src = "images/bg3.jpg";
     let bgImg = bgImages[0];
 
-    const transitionScreens = {
-      1: "images/K2.jpg",
-      2: "images/K3.jpg"
-    };
+    const transitionScreens = { 1: "images/K2.jpg", 2: "images/K3.jpg" };
 
     const bowlImg = new Image();
     bowlImg.src = 'images/bowl.png';
@@ -159,18 +201,17 @@
       { file: "GV3.png", type: "vegetable", health: "good" },
       { file: "GV4.png", type: "vegetable", health: "good" },
       { file: "GV5.png", type: "vegetable", health: "good" },
-      { file: "GStrach1.png", type: "rice", health: "good" },
-      { file: "GStrach3.png", type: "rice", health: "good" },
-      { file: "BStrach1.png", type: "rice", health: "bad" },
-      { file: "BStrach2.png", type: "rice", health: "bad" },
-      { file: "BStrach3.png", type: "rice", health: "bad" },
+      { file: "GStrach1.png", type: "rice",  health: "good" },
+      { file: "GStrach3.png", type: "rice",  health: "good" },
+      { file: "BStrach1.png", type: "rice",  health: "bad" },
+      { file: "BStrach2.png", type: "rice",  health: "bad" },
+      { file: "BStrach3.png", type: "rice",  health: "bad" },
     ];
 
     function showScreen(id) {
       document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
       document.getElementById(id).classList.add("active");
     }
-
 
     function startGame() {
       showScreen("gameCanvasContainer");
@@ -180,14 +221,15 @@
       prepareLevel();
       loop();
       bgm.play().catch(() => console.log("音樂播放失敗"));
+      warmUpSoundPools(); // ✅ 只在開始遊戲時做一次靜音預熱
     }
 
     function prepareLevel() {
       foodQueue = [];
       const correctFoods = allFoods.filter(f =>
-        (level === 1 && f.type === 'meat' && f.health === 'good') ||
-        (level === 2 && f.type === 'vegetable' && f.health === 'good') ||
-        (level === 3 && f.type === 'rice' && f.health === 'good')
+        (level === 1 && f.type === 'meat'       && f.health === 'good') ||
+        (level === 2 && f.type === 'vegetable'  && f.health === 'good') ||
+        (level === 3 && f.type === 'rice'       && f.health === 'good')
       );
       const incorrectFoods = allFoods.filter(f => !correctFoods.includes(f));
       for (let i = 0; i < 10; i++) {
@@ -195,7 +237,7 @@
         foodQueue.push(incorrectFoods[Math.floor(Math.random() * incorrectFoods.length)]);
       }
       spawnFood();
-      startLevelTimer(); // ← 加這行，開始計時
+      startLevelTimer();
     }
 
     function spawnFood() {
@@ -215,39 +257,48 @@
       img.src = `images/${f.file}`;
     }
 
-   /* function isColliding(food, basket) {
+    // ===== 命中判定難度設定 =====
+    // 可選 'easy' | 'normal' | 'hard' | 'custom'
+    let hitboxDifficulty = 'hard';
+
+    const HITBOX_PRESETS = {
+      easy:   { shrinkX: 5,  verticalTolerance: 40 },
+      normal: { shrinkX: 15, verticalTolerance: 25 },
+      hard:   { shrinkX: 25, verticalTolerance: 15 },
+    };
+
+    const HITBOX_CUSTOM = { shrinkX: 20, verticalTolerance: 20 };
+
+    function getHitboxParams() {
+      if (hitboxDifficulty === 'custom') return HITBOX_CUSTOM;
+      return HITBOX_PRESETS[hitboxDifficulty] || HITBOX_PRESETS.normal;
+    }
+
+    // 縮小判定區域（左右收窄 + 垂直容差）
+    function isColliding(food, basket) {
+      const { shrinkX, verticalTolerance } = getHitboxParams();
+
+      const foodBottom = food.y + food.size;
+      const foodCenterX = food.x + food.size / 2;
+
+      const plateTop = basket.y;
+      const plateLeft = basket.x + shrinkX;
+      const plateRight = basket.x + basket.width - shrinkX;
+
       return (
-        food.x < basket.x + basket.width &&
-        food.x + food.size > basket.x &&
-        food.y < basket.y + basket.height &&
-        food.y + food.size > basket.y
+        foodBottom >= plateTop &&
+        foodBottom <= plateTop + verticalTolerance &&
+        foodCenterX > plateLeft &&
+        foodCenterX < plateRight
       );
-    } */
-function isColliding(food, basket) {
-  // 食物底邊
-  const foodBottom = food.y + food.size;
-  // 食物中心 X
-  const foodCenterX = food.x + food.size / 2;
-
-  // 盤子上緣 Y（只算上半部或上緣）
-  const plateTop = basket.y;
-  const plateLeft = basket.x;
-  const plateRight = basket.x + basket.width;
-
-  return (
-    // 食物底邊必須到達或超過盤子上緣
-    foodBottom > plateTop &&
-    // 食物中心必須落在盤子的左右範圍內
-    foodCenterX > plateLeft &&
-    foodCenterX < plateRight
-  );
-}
+    }
 
     function update() {
       if (!currentFood) return;
       currentFood.y += currentFood.speed;
       const caught = isColliding(currentFood, basket);
       const missed = currentFood.y > canvas.height;
+
       if (caught || missed) {
         if (caught) handleCatch(currentFood);
         currentFood = null;
@@ -256,12 +307,15 @@ function isColliding(food, basket) {
       }
     }
 
+    // ✅ 僅依情境播放不同音效（成功／不健康／非目標），不再播放通用接到音
     function handleCatch(food) {
+      if (navigator.vibrate) navigator.vibrate(30);
+
       if (food.health === 'bad') {
         score -= 2;
         stats[level].bad++;
         bgImg = bgImages[3];
-        badSoundPool.play();
+        badSoundPool.play();         // 不健康 → 錯誤音（重）
       } else if (
         (level === 1 && food.type === 'meat') ||
         (level === 2 && food.type === 'vegetable') ||
@@ -270,45 +324,45 @@ function isColliding(food, basket) {
         score += 2;
         stats[level].good++;
         bgImg = bgImages[1];
-        goodSoundPool.play();
+        goodSoundPool.play();        // 本關健康目標 → 成功音
       } else {
         score -= 1;
         stats[level].bad++;
         bgImg = bgImages[2];
-        wrongSoundPool.play();
+        wrongSoundPool.play();       // 健康但非目標 → 接錯音（輕）
       }
+
       if (bgTimeout) clearTimeout(bgTimeout);
       bgTimeout = setTimeout(() => { bgImg = bgImages[0]; }, 3000);
     }
 
-    let levelTime = 65; // 每關秒數可自訂
+    let levelTime = 65;
     let timeLeft = levelTime;
     let timerInterval = null;
 
     function draw() {
       if (bgImg.complete) ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-      basket.width = 120; basket.height = 80;
+      basket.width = 120; basket.height = 80; // 與視覺一致
       if (bowlImg.complete) ctx.drawImage(bowlImg, basket.x, basket.y, basket.width, basket.height);
       if (currentFood?.image?.complete) ctx.drawImage(currentFood.image, currentFood.x, currentFood.y, currentFood.size, currentFood.size);
       ctx.font = "bold 24px sans-serif";
       ctx.fillStyle = "black";
       ctx.fillText(`關卡 ${level} 分數:${score}`, 10, 40);
-      // 顯示右上角倒數計時
       ctx.textAlign = "right";
       ctx.fillText(`剩餘時間: ${timeLeft}s`, canvas.width - 10, 40);
-      ctx.textAlign = "left"; // 恢復原本對齊方式
+      ctx.textAlign = "left";
     }
 
     function startLevelTimer() {
       timeLeft = levelTime;
-      clearInterval(timerInterval); // 清除舊計時器（若有）
+      clearInterval(timerInterval);
       timerInterval = setInterval(() => {
         timeLeft--;
         if (timeLeft <= 0) {
           clearInterval(timerInterval);
-          showTransition(); // 時間到，自動換關或結束
+          showTransition();
         }
-      }, 1000); // 每秒遞減
+      }, 1000);
     }
 
     function loop() {
@@ -318,7 +372,7 @@ function isColliding(food, basket) {
     }
 
     function showTransition() {
-      clearInterval(timerInterval); 
+      clearInterval(timerInterval);
       if (level < 3) {
         document.getElementById("betweenLevel").style.backgroundImage = `url('${transitionScreens[level]}')`;
         showScreen("betweenLevel");
@@ -332,7 +386,7 @@ function isColliding(food, basket) {
     }
 
     function showResult() {
-      clearInterval(timerInterval); 
+      clearInterval(timerInterval);
       showScreen("result");
       const bg = score >= 20 ? "result1.jpg" : score >= 10 ? "result2.jpg" : "result3.jpg";
       document.getElementById("result").style.backgroundImage = `url('images/${bg}')`;
@@ -354,7 +408,9 @@ function isColliding(food, basket) {
             permissionTip.style.display = 'none';
           }
         }).catch(() => permissionTip.textContent = "裝置方向權限未開啟");
-      } else window.addEventListener("deviceorientation", handleOrientation);
+      } else {
+        window.addEventListener("deviceorientation", handleOrientation);
+      }
     }
 
     function handleOrientation(event) {
@@ -377,5 +433,3 @@ function isColliding(food, basket) {
   </script>
 </body>
 </html>
-
-
