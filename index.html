@@ -85,11 +85,33 @@
     bgm.loop = true;
     bgm.volume = 0.2;
 
+    // ========== 音訊解鎖：一次性無聲 Buffer（不觸發任何目錄音） ==========
+    let audioUnlocked = false;
+    async function unlockAudioOnce() {
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        const ctx = new AC();
+        await ctx.resume();               // 需要在使用者互動後呼叫
+        const buffer = ctx.createBuffer(1, 1, 22050); // 1 個樣本，完全無聲
+        const src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(ctx.destination);
+        src.start(0);                     // 播放無聲 1-sample
+        // 很快關掉即可（避免佔資源）
+        setTimeout(() => { try { ctx.close(); } catch(e){} }, 120);
+      } catch (e) {
+        console.log('unlockAudioOnce 失敗但可忽略：', e);
+      }
+    }
+
     // 穩定的音效池：挑空閒音軌 + 安全重置 + 失敗重試
     function createSoundPool(src, poolSize = 6) {
       const pool = Array.from({ length: poolSize }, () => {
         const audio = new Audio(src);
-        audio.preload = "auto";
+        audio.preload = "auto"; // 先行預載
         return audio;
       });
 
@@ -100,19 +122,19 @@
         return pool[0]; // 全部在播時覆蓋第一個
       }
 
-      // ✅ 修正 B：播放前強制解除靜音，避免音軌留在 muted 狀態
+      // ✅ 播放前強制解除靜音，避免音軌留在 muted 狀態
       async function safePlay(a, volume) {
         try {
           a.pause();
           a.currentTime = 0.001; // iOS 對 0 較不穩
-          a.muted = false;       // 關鍵：確保不是靜音
+          a.muted = false;
           a.volume = volume;
           await a.play();
         } catch (err) {
           try {
             a.pause();
             a.currentTime = 0.001;
-            a.muted = false;     // 再強制一次
+            a.muted = false;
             a.volume = volume;
             await a.play();
           } catch (err2) {
@@ -126,7 +148,11 @@
           const a = getIdleAudio();
           safePlay(a, volume);
         },
-        _all() { return pool; } // 給預熱用
+        // 僅供預載使用，不會播放
+        preload() {
+          pool.forEach(a => { try { a.load(); } catch(e){} });
+        },
+        _all() { return pool; }
       };
     }
 
@@ -134,37 +160,15 @@
     const goodSoundPool  = createSoundPool('sounds/good.mp3');
     const badSoundPool   = createSoundPool('sounds/bad.mp3');
     const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
-    // ⚠️ 已移除 catchSoundPool：不再播放通用接到音，以避免與情境音疊加
+    // ⚠️ 沒有 catchSoundPool（已移除）
 
-    // 🔇 靜音預熱旗標
+    // 🔇 預熱旗標（不再播放，只做預載 load）
     let sfxWarmedUp = false;
-
-    // ✅ 修正 A：預熱改成「非靜音、音量 0」的無聲播放，再暫停
     function warmUpSoundPools() {
       if (sfxWarmedUp) return;
       sfxWarmedUp = true;
-      const pools = [clickSoundPool, goodSoundPool, badSoundPool, wrongSoundPool];
-      pools.forEach(pool => {
-        pool._all().forEach(a => {
-          const prevMuted = a.muted;
-          const prevVol = a.volume;
-
-          // 關鍵：非靜音 + 音量 0（幾乎無聲，但符合解鎖條件）
-          a.muted = false;
-          a.volume = 0;
-
-          a.play().then(() => {
-            a.pause();
-            a.currentTime = 0.001;
-            // 還原原本設定
-            a.muted = prevMuted;
-            a.volume = prevVol;
-          }).catch(() => {
-            a.muted = prevMuted;
-            a.volume = prevVol;
-          });
-        });
-      });
+      // 僅預載，不 play → 完全不會出聲
+      [clickSoundPool, goodSoundPool, badSoundPool, wrongSoundPool].forEach(p => p.preload());
     }
 
     function handleClickFeedback() {
@@ -228,9 +232,13 @@
       score = 0;
       prepareLevel();
       loop();
-      // 放在使用者互動之後觸發，解鎖自動播放
+
+      // 先進行一次全域音訊解鎖（無聲 Buffer）
+      unlockAudioOnce();
+      // 接著再播放 BGM（皆在使用者互動後進行）
       bgm.play().catch(() => console.log("音樂播放失敗"));
-      warmUpSoundPools(); // ✅ 只在開始遊戲時做一次預熱（非靜音 + 音量 0）
+      // 只做預載，不播放 → 不會在一開始跑出一堆音效
+      warmUpSoundPools();
     }
 
     function prepareLevel() {
@@ -302,6 +310,16 @@
       );
     }
 
+    // ====== 簡易 SFX 冷卻（避免同幀或極短時間內連爆） ======
+    let sfxCooldownAt = 0;
+    const SFX_COOLDOWN_MS = 60;
+    function playSfx(pool, vol = 1) {
+      const now = performance.now();
+      if (now - sfxCooldownAt < SFX_COOLDOWN_MS) return;
+      sfxCooldownAt = now;
+      pool.play(vol);
+    }
+
     function update() {
       if (!currentFood) return;
       currentFood.y += currentFood.speed;
@@ -324,7 +342,7 @@
         score -= 2;
         stats[level].bad++;
         bgImg = bgImages[3];
-        badSoundPool.play();         // 不健康 → 錯誤音（重）
+        playSfx(badSoundPool);      // 不健康 → 錯誤音（重）
       } else if (
         (level === 1 && food.type === 'meat') ||
         (level === 2 && food.type === 'vegetable') ||
@@ -333,12 +351,12 @@
         score += 2;
         stats[level].good++;
         bgImg = bgImages[1];
-        goodSoundPool.play();        // 本關健康目標 → 成功音
+        playSfx(goodSoundPool);     // 本關健康目標 → 成功音
       } else {
         score -= 1;
         stats[level].bad++;
         bgImg = bgImages[2];
-        wrongSoundPool.play();       // 健康但非目標 → 接錯音（輕）
+        playSfx(wrongSoundPool);    // 健康但非目標 → 接錯音（輕）
       }
 
       if (bgTimeout) clearTimeout(bgTimeout);
@@ -434,7 +452,7 @@
       document.querySelectorAll('.hotspot').forEach(button => {
         const original = button.onclick;
         button.onclick = (e) => {
-          handleClickFeedback();
+          handleClickFeedback();   // 可能只在首頁/過場被點到
           if (typeof original === 'function') original.call(button, e);
         };
       });
