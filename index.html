@@ -63,8 +63,8 @@
      style="background: black; color: white; display: flex; justify-content: center; align-items: center; flex-direction: column;">
   <div id="loadingText" style="font-size: 28px;">載入中...</div>
   </div>
-  <div id="home" class="screen active" style="background-image: url('images/cover.jpg');">
-    <div class="hotspot" onclick="showScreen('intro')"></div>
+  <div id="home" class="screen" style="background-image: url('images/cover.jpg');">
+  <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
   <div id="K1Transition" class="screen" style="background-image: url('images/K1.jpg');">
     <div class="hotspot" onclick="startGame()"></div>
@@ -233,22 +233,42 @@
       document.getElementById(id).classList.add("active");
     }
 
-    function preloadAudio(audioList, callback) {
+function preloadAudio(audioList, callback) {
   let loadedCount = 0;
   const total = audioList.length;
   const loadingText = document.getElementById("loadingText");
 
+  function checkDone() {
+    loadedCount++;
+    loadingText.textContent = `載入中... ${loadedCount}/${total}`;
+    if (loadedCount >= total) {
+      callback();
+    }
+  }
+
   audioList.forEach(audio => {
-    // 當音檔可以順暢播放時，計數+1
-    audio.addEventListener("canplaythrough", () => {
-      loadedCount++;
-      loadingText.textContent = `載入中... ${loadedCount}/${total}`;
-      if (loadedCount === total) {
-        callback();
+    let done = false;
+    function markDone() {
+      if (!done) {
+        done = true;
+        checkDone();
       }
-    }, { once: true });
+    }
+    audio.addEventListener("canplaythrough", markDone, { once: true });
+    audio.addEventListener("loadeddata", markDone, { once: true });
+    audio.addEventListener("error", markDone, { once: true }); // 出錯也當作完成，避免卡住
+    try { audio.load(); } catch(e){}
   });
+
+  // 後備 timeout，避免永遠卡在載入中
+  setTimeout(() => {
+    if (loadedCount < total) {
+      console.warn("⚠️ 音訊載入未完成，使用 fallback 進入遊戲");
+      callback();
+    }
+  }, 5000);
 }
+
 
 function startGame() {
   showScreen("loading"); // 先顯示 loading 畫面
