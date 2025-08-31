@@ -273,25 +273,19 @@
       return HITBOX_PRESETS[hitboxDifficulty] || HITBOX_PRESETS.normal;
     }
 
-    // 縮小判定區域（左右收窄 + 垂直容差）
-    function isColliding(food, basket) {
-      const { shrinkX, verticalTolerance } = getHitboxParams();
+   function isColliding(food, basket) {
+  const marginX = 15; // 左右縮小 15px
+  const foodBottom = food.y + food.size;
+  const foodCenterX = food.x + food.size / 2;
 
-      const foodBottom = food.y + food.size;
-      const foodCenterX = food.x + food.size / 2;
-
-      const plateTop = basket.y;
-      const plateLeft = basket.x + shrinkX;
-      const plateRight = basket.x + basket.width - shrinkX;
-
-      return (
-        foodBottom >= plateTop &&
-        foodBottom <= plateTop + verticalTolerance &&
-        foodCenterX > plateLeft &&
-        foodCenterX < plateRight
-      );
-    }
-
+  return (
+    // 食物的底邊必須「超過」盤子上緣
+    foodBottom >= basket.y &&
+    // 食物中心點要在盤子寬度內（收窄後）
+    foodCenterX > basket.x + marginX &&
+    foodCenterX < basket.x + basket.width - marginX
+  );
+}
     function update() {
       if (!currentFood) return;
       currentFood.y += currentFood.speed;
