@@ -427,6 +427,13 @@ function startGame() {
     let timeLeft = levelTime;
     let timerInterval = null;
 
+     function getLevelTarget(level) {
+      if (level === 1) return "本關目標：只吃健康蛋白質";
+      if (level === 2) return "本關目標：只吃蔬菜";
+      if (level === 3) return "本關目標：只吃健康澱粉";
+      return "";
+    }
+
     function draw() {
       if (bgImg.complete) ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
       if (bowlImg.complete) ctx.drawImage(bowlImg, basket.x, basket.y, basket.width, basket.height);
@@ -437,6 +444,7 @@ function startGame() {
       ctx.textAlign = "right";
       ctx.fillText(`剩餘時間: ${timeLeft}s`, canvas.width - 10, 40);
       ctx.textAlign = "left";
+      ctx.fillText(getLevelTarget(level), 10, 70);
     }
 
     function startLevelTimer() {
