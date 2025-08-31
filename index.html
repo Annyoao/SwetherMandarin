@@ -234,39 +234,37 @@
     }
 
 function preloadAudio(audioList, callback) {
-  let loadedCount = 0;
   const total = audioList.length;
+  let loadedCount = 0;
   const loadingText = document.getElementById("loadingText");
+  let finished = false;
 
   function checkDone() {
+    if (finished) return;
     loadedCount++;
     loadingText.textContent = `載入中... ${loadedCount}/${total}`;
     if (loadedCount >= total) {
+      finished = true;
       callback();
     }
   }
 
   audioList.forEach(audio => {
-    let done = false;
-    function markDone() {
-      if (!done) {
-        done = true;
-        checkDone();
-      }
-    }
-    audio.addEventListener("canplaythrough", markDone, { once: true });
-    audio.addEventListener("loadeddata", markDone, { once: true });
-    audio.addEventListener("error", markDone, { once: true }); // 出錯也當作完成，避免卡住
+    // 嘗試強制瀏覽器開始下載
     try { audio.load(); } catch(e){}
+
+    // 我們不等 canplaythrough，直接給個最短延遲
+    setTimeout(checkDone, 50);
   });
 
-  // 後備 timeout，避免永遠卡在載入中
+  // 後備 timeout，避免萬一出現異常
   setTimeout(() => {
-    if (loadedCount < total) {
-      console.warn("⚠️ 音訊載入未完成，使用 fallback 進入遊戲");
+    if (!finished) {
+      console.warn("⚠️ 音效預載超時，直接進入遊戲");
+      finished = true;
       callback();
     }
-  }, 5000);
+  }, 3000);
 }
 
 
