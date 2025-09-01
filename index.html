@@ -75,12 +75,9 @@
   </div>
 
   <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
-
-  <div id="permissionTip">
-    請點擊允許「裝置方向存取」以啟用搖晃控制
-    <button onclick="askPermission()">允許</button>
+    <div id="permissionTip">請點擊允許「裝置方向存取」以啟用搖晃控制</div>
+    <div class="hotspot" onclick="showScreen('K1Transition')"></div>
   </div>
-    </div>
 
   <div id="gameCanvasContainer" class="screen">
     <canvas id="gameCanvas"></canvas>
@@ -183,31 +180,12 @@
       // 僅預載，不 play → 完全不會出聲
       [clickSoundPool, goodSoundPool, badSoundPool, wrongSoundPool].forEach(p => p.preload());
     }
-  
 
     function handleClickFeedback() {
       // 若不希望按鈕有聲音，註解下一行
       clickSoundPool.play();
       if (navigator.vibrate) navigator.vibrate(80);
     }
-
-    function askPermission() {
-  if (typeof DeviceOrientationEvent !== 'undefined' && 
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
-    DeviceOrientationEvent.requestPermission().then(res => {
-      if (res === 'granted') {
-        window.addEventListener("deviceorientation", handleOrientation);
-        permissionTip.style.display = 'none';
-      } else {
-        permissionTip.textContent = "❌ 你拒絕了方向感測器，碗盤無法移動";
-      }
-    });
-  } else {
-    // Android 或桌機直接啟用
-    window.addEventListener("deviceorientation", handleOrientation);
-    permissionTip.style.display = 'none';
-  }
-}
 
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
@@ -321,7 +299,8 @@ function startGame() {
     // ✅ 正式開始遊戲
     unlockAudioOnce();
     showScreen("gameCanvasContainer");
-    document.getElementById("permissionTip").style.display = "block";    level = 1;
+    requestDeviceOrientation();
+    level = 1;
     score = 0;
     prepareLevel();
     loop();
@@ -514,6 +493,20 @@ function startGame() {
       }, 800);
     }
 
+    function requestDeviceOrientation() {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        permissionTip.style.display = 'block';
+        DeviceOrientationEvent.requestPermission().then(res => {
+          if (res === 'granted') {
+            window.addEventListener("deviceorientation", handleOrientation);
+            permissionTip.style.display = 'none';
+          }
+        }).catch(() => permissionTip.textContent = "裝置方向權限未開啟");
+      } else {
+        window.addEventListener("deviceorientation", handleOrientation);
+      }
+    }
+
     function handleOrientation(event) {
       const tilt = event.gamma;
       if (tilt != null) {
@@ -534,3 +527,4 @@ function startGame() {
   </script>
 </body>
 </html>
+
