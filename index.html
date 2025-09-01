@@ -80,6 +80,7 @@
     請點擊允許「裝置方向存取」以啟用搖晃控制
     <button onclick="askPermission()">允許</button>
   </div>
+    </div>
 
   <div id="gameCanvasContainer" class="screen">
     <canvas id="gameCanvas"></canvas>
@@ -320,8 +321,7 @@ function startGame() {
     // ✅ 正式開始遊戲
     unlockAudioOnce();
     showScreen("gameCanvasContainer");
-    requestDeviceOrientation();
-    level = 1;
+    document.getElementById("permissionTip").style.display = "block";    level = 1;
     score = 0;
     prepareLevel();
     loop();
@@ -512,20 +512,6 @@ function startGame() {
             ${score} 分！
           </div>`;
       }, 800);
-    }
-
-    function requestDeviceOrientation() {
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        permissionTip.style.display = 'block';
-        DeviceOrientationEvent.requestPermission().then(res => {
-          if (res === 'granted') {
-            window.addEventListener("deviceorientation", handleOrientation);
-            permissionTip.style.display = 'none';
-          }
-        }).catch(() => permissionTip.textContent = "裝置方向權限未開啟");
-      } else {
-        window.addEventListener("deviceorientation", handleOrientation);
-      }
     }
 
     function handleOrientation(event) {
