@@ -512,6 +512,10 @@ function startGame() {
       }
     }
 
+    function askPermission() {
+      requestDeviceOrientation();
+    }
+
     function handleOrientation(event) {
       const tilt = event.gamma;
       if (tilt != null) {
