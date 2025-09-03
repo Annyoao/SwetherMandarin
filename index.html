@@ -38,7 +38,18 @@
       transform: translateX(-50%);
       cursor: pointer;
     }
-    
+    #permissionTip {
+      position: absolute;
+      bottom: 150px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255,255,255,0.9);
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 16px;
+      color: #000;
+      display: none;
+    }
     canvas {
       display: block;
       pointer-events: none;
@@ -62,6 +73,7 @@
   
   <!-- 提示頁 (intro) -->
   <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
+    <div id="permissionTip">Please allow device orientation access to enable tilt control.</div>
     <div class="hotspot" onclick="showScreen('K1Transition')"></div>
   </div>
   
@@ -194,6 +206,7 @@
     let foodQueue = [], score = 0, level = 1;
     let stats = { 1: { good: 0, bad: 0 }, 2: { good: 0, bad: 0 }, 3: { good: 0, bad: 0 } };
     let bgTimeout = null;
+    const permissionTip = document.getElementById("permissionTip");
 
     const bgImages = { 0: new Image(), 1: new Image(), 2: new Image(), 3: new Image() };
     bgImages[0].src = "images/bg0.jpg";
