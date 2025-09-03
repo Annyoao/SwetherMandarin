@@ -48,15 +48,6 @@
       height: 100%;
       background: rgba(0,0,0,0.4); /* 這裡 0.4 可以調整暗度 */
     }
-    #permissionTip {
-      position: absolute;
-      bottom: 150px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: black;
-      font-size: 16px;
-      text-align: center;
-    }
 
     canvas {
       display: block;
@@ -83,11 +74,7 @@
   </div>
 
 <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
-  <div id="permissionTip">
-    請點擊允許「裝置方向存取」以啟用搖晃控制
-    <br><br>
-    <button onclick="askPermission()">允許</button>
-  </div>
+  
 </div>
 
   <div id="gameCanvasContainer" class="screen">
@@ -214,7 +201,6 @@
     let foodQueue = [], score = 0, level = 1;
     let stats = { 1: { good: 0, bad: 0 }, 2: { good: 0, bad: 0 }, 3: { good: 0, bad: 0 } };
     let bgTimeout = null;
-    const permissionTip = document.getElementById("permissionTip");
 
     const bgImages = { 0: new Image(), 1: new Image(), 2: new Image(), 3: new Image() };
     bgImages[0].src = "images/bg0.jpg";
@@ -506,21 +492,14 @@ function startGame() {
 
     function requestDeviceOrientation() {
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        permissionTip.style.display = 'block';
         DeviceOrientationEvent.requestPermission().then(res => {
           if (res === 'granted') {
             window.addEventListener("deviceorientation", handleOrientation);
-            permissionTip.style.display = 'none';
           }
-        }).catch(() => permissionTip.textContent = "裝置方向權限未開啟");
+        }).catch(() => console.log("裝置方向權限未開啟"));
       } else {
         window.addEventListener("deviceorientation", handleOrientation);
       }
-    }
-
-    function askPermission() {
-      requestDeviceOrientation();
-      showScreen("K1Transition"); 
     }
 
     function handleOrientation(event) {
