@@ -485,14 +485,14 @@ function startGame() {
 
     function requestDeviceOrientation() {
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        permissionTip.style.display = 'block';
         DeviceOrientationEvent.requestPermission().then(res => {
           if (res === 'granted') {
             window.addEventListener("deviceorientation", handleOrientation);
+            permissionTip.style.display = 'none';
           }
-        }).catch(() => console.log("裝置方向權限未開啟"));
-      } else {
-        window.addEventListener("deviceorientation", handleOrientation);
-      }
+        }).catch(() => permissionTip.textContent = "裝置方向權限未開啟");
+      } else window.addEventListener("deviceorientation", handleOrientation);
     }
 
     function handleOrientation(event) {
