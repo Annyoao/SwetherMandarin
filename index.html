@@ -280,6 +280,7 @@ function preloadAudio(audioList, callback) {
 
 
 function startGame() {
+  unlockAudioOnce(); //解鎖所有音效
   showScreen("loading"); // 顯示 loading 畫面
   const loadingText = document.getElementById("loadingText");
   loadingText.textContent = "載入背景音樂中...";
@@ -300,7 +301,6 @@ function startGame() {
     warmUpSoundPools();
 
     // ✅ 正式開始遊戲
-    unlockAudioOnce();
     showScreen("gameCanvasContainer");
     requestDeviceOrientation();
     level = 1;
