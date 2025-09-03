@@ -38,17 +38,26 @@
       transform: translateX(-50%);
       cursor: pointer;
     }
+    
+   #intro::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.4); /* 這裡 0.4 可以調整暗度 */
+    }
     #permissionTip {
       position: absolute;
       bottom: 150px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(255,255,255,0.9);
-      padding: 10px 20px;
-      border-radius: 10px;
+      color: black;
       font-size: 16px;
-      color: #000;
+      text-align: center;
     }
+
     canvas {
       display: block;
       pointer-events: none;
@@ -73,16 +82,13 @@
     <div class="hotspot" onclick="startGame()"></div>
   </div>
 
-  <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
-  <div id="permissionTip" style="background: rgba(255,255,255,0.9); padding: 10px 20px; border-radius: 10px; margin-bottom: 20px;">
+<div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
+  <div id="permissionTip">
     請點擊允許「裝置方向存取」以啟用搖晃控制
-    <br>
-    <button onclick="askPermission()" style="margin-top:10px; padding:6px 12px; font-size:16px;">
-      ✅ 允許
-    </button>
+    <br><br>
+    <button onclick="askPermission()">允許</button>
   </div>
-  <div class="hotspot" onclick="showScreen('K1Transition')"></div>
-</div> 
+</div>
 
   <div id="gameCanvasContainer" class="screen">
     <canvas id="gameCanvas"></canvas>
