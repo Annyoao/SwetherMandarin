@@ -391,7 +391,7 @@ function startGame() {
         score -= 2;
         stats[level].bad++;
         bgImg = bgImages[3];
-        badSoundPool.play(2);          // ❌ 不健康 → 錯誤音
+        badSoundPool.play(1);          // ❌ 不健康 → 錯誤音
       } else if (
         (level === 1 && food.type === 'meat') ||
         (level === 2 && food.type === 'vegetable') ||
@@ -405,7 +405,7 @@ function startGame() {
         score -= 1;
         stats[level].bad++;
         bgImg = bgImages[2];
-        wrongSoundPool.play(2);        // ⚠️ 健康但非目標 → 順序不對
+        wrongSoundPool.play(1);        // ⚠️ 健康但非目標 → 順序不對
       }
 
       if (bgTimeout) clearTimeout(bgTimeout);
