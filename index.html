@@ -47,15 +47,16 @@
     }
   </style>
 </head>
+
 <body>
-  <!-- 🚫 一開始不要 active -->
-  <div id="loading" class="screen" 
+  <!-- 🚀 載入畫面 (一開始顯示 active) -->
+  <div id="loading" class="screen active" 
      style="background: black; color: white; display: flex; justify-content: center; align-items: center; flex-direction: column;">
     <div id="loadingText" style="font-size: 28px;">載入中...</div>
   </div>
-
-   <!-- 首頁 (封面) -->
-  <div id="home" class="screen active" style="background-image: url('images/cover.jpg');">
+  
+  <!-- 首頁 (封面) ➡️ 一開始不要 active -->
+  <div id="home" class="screen" style="background-image: url('images/cover.jpg');">
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
   
@@ -511,6 +512,36 @@ function startGame() {
         };
       });
     }
+
+// ===== 放在最下面 =====
+  window.addEventListener("load", () => {
+    const loadingText = document.getElementById("loadingText");
+
+    let loaded = 0;
+    const toLoad = [bgm, "images/cover.jpg", "images/intro.jpg", "images/K1.jpg"];
+
+    function checkDone() {
+      loaded++;
+      loadingText.textContent = `載入中... ${loaded}/${toLoad.length}`;
+      if (loaded >= toLoad.length) {
+        setTimeout(() => {
+          showScreen("home"); // ✅ 載完後切到首頁
+        }, 500);
+      }
+    }
+
+    bgm.addEventListener("canplaythrough", checkDone, { once: true });
+    try { bgm.load(); } catch(e) {}
+
+    toLoad.slice(1).forEach(src => {
+      const img = new Image();
+      img.onload = checkDone;
+      img.onerror = checkDone;
+      img.src = src;
+    });
+
+    showScreen("loading");
+  });
   </script>
 </body>
 </html>
