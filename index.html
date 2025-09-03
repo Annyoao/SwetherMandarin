@@ -38,50 +38,44 @@
       transform: translateX(-50%);
       cursor: pointer;
     }
-    #permissionTip {
-      position: absolute;
-      bottom: 150px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(255,255,255,0.9);
-      padding: 10px 20px;
-      border-radius: 10px;
-      font-size: 16px;
-      color: #000;
-      display: none;
-    }
     canvas {
       display: block;
       pointer-events: none;
       z-index: -1;
       position: relative;
     }
+    #allowOrientationBtn {
+      padding: 15px 25px;
+      font-size: 20px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      background: #ffcc00;
+    }
   </style>
 </head>
-
 <body>
-  <!-- 🚀 載入畫面 (一開始顯示 active) -->
-  <div id="loading" class="screen active" 
-     style="background: black; color: white; display: flex; justify-content: center; align-items: center; flex-direction: column;">
+  <!-- 🚀 載入畫面 -->
+  <div id="loading" class="screen active" style="background:black; color:white;">
     <div id="loadingText" style="font-size: 28px;">載入中...</div>
   </div>
-  
-  <!-- 首頁 (封面) ➡️ 一開始不要 active -->
+
+  <!-- 首頁 -->
   <div id="home" class="screen" style="background-image: url('images/cover.jpg');">
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
-  
-  <!-- 提示頁 (intro) -->
+
+  <!-- Intro (允許方向) -->
   <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
-    <div id="permissionTip">Please allow device orientation access to enable tilt control.</div>
-    <div class="hotspot" onclick="showScreen('K1Transition')"></div>
+    <button id="allowOrientationBtn">允許裝置方向</button>
   </div>
-  
+
   <!-- K1 過場 -->
   <div id="K1Transition" class="screen" style="background-image: url('images/K1.jpg');">
     <div class="hotspot" onclick="startGame()"></div>
   </div>
 
+  <!-- 遊戲 -->
   <div id="gameCanvasContainer" class="screen">
     <canvas id="gameCanvas"></canvas>
   </div>
@@ -95,125 +89,102 @@
     <div class="hotspot" onclick="location.reload()"></div>
   </div>
 
-  <script>
-    const bgm = new Audio('sounds/bgm.mp3');
-    bgm.loop = true;
-    bgm.volume = 0.1;
+<script>
+/* ================= 音樂與音效 ================= */
+const bgm = new Audio('sounds/bgm.mp3');
+bgm.loop = true;
+bgm.volume = 0.1;
 
-    // ========== 音訊解鎖：一次性無聲 Buffer（不觸發任何目錄音） ==========
-    let audioUnlocked = false;
-    async function unlockAudioOnce() {
-      if (audioUnlocked) return;
-      audioUnlocked = true;
-      try {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        const ctx = new AC();
-        await ctx.resume();               // 需在使用者互動後呼叫
-        const buffer = ctx.createBuffer(1, 1, 22050); // 1 個樣本，完全無聲
-        const src = ctx.createBufferSource();
-        src.buffer = buffer;
-        src.connect(ctx.destination);
-        src.start(0);                     // 播放無聲 1-sample
-        setTimeout(() => { try { ctx.close(); } catch(e){} }, 120);
-      } catch (e) {
-        console.log('unlockAudioOnce 失敗但可忽略：', e);
-      }
+let audioUnlocked = false;
+async function unlockAudioOnce() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    await ctx.resume();
+    const buffer = ctx.createBuffer(1, 1, 22050);
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ctx.destination);
+    src.start(0);
+    setTimeout(() => { try { ctx.close(); } catch(e){} }, 120);
+  } catch (e) {
+    console.log('unlockAudioOnce 失敗：', e);
+  }
+}
+
+// 音效池（不會斷音）
+function createSoundPool(src, poolSize = 6) {
+  const pool = Array.from({ length: poolSize }, () => {
+    const audio = new Audio(src);
+    audio.preload = "auto";
+    return audio;
+  });
+  function getIdleAudio() {
+    for (const a of pool) {
+      if (a.paused || a.ended) return a;
     }
-
-    // 穩定的音效池：挑空閒音軌 + 安全重置 + 失敗重試
-    function createSoundPool(src, poolSize = 6) {
-      const pool = Array.from({ length: poolSize }, () => {
-        const audio = new Audio(src);
-        audio.preload = "auto"; // 先行預載
-        return audio;
-      });
-
-      function getIdleAudio() {
-        for (const a of pool) {
-          if (a.paused || a.ended) return a;
-        }
-       return null;// 全部在播時覆蓋第一個
-      }
-
-    async function safePlay(volume) {
-        let a = getIdleAudio();
-        if (!a) {
-          // ✅ 全部忙碌 → 直接複製一個新音軌，不覆蓋
-          a = new Audio(src);
-        }
-        try {
-          a.currentTime = 0;
-          a.volume = volume;
-          a.muted = false;
-          await a.play();
-        } catch (err) {
-          console.warn("音效播放失敗:", err);
-        }
-      }
-      return {
-        play(volume = 1) {
-          safePlay(volume);
-        },
-        preload() {
-          pool.forEach(a => { try { a.load(); } catch (e) {} });
-        },
-        _all() { return pool; }
-      };
+    return pool[0];
+  }
+  async function safePlay(volume) {
+    let a = getIdleAudio();
+    try {
+      a.currentTime = 0;
+      a.volume = volume;
+      a.muted = false;
+      await a.play();
+    } catch (err) {
+      console.warn("音效播放失敗:", err);
     }
+  }
+  return {
+    play(volume = 1) { safePlay(volume); },
+    preload() { pool.forEach(a => { try { a.load(); } catch (e) {} }); },
+    _all() { return pool; }
+  };
+}
 
+const clickSoundPool = createSoundPool('sounds/click.mp3');
+const goodSoundPool  = createSoundPool('sounds/good.mp3');
+const badSoundPool   = createSoundPool('sounds/bad.mp3');
+const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
 
-    const clickSoundPool = createSoundPool('sounds/click.mp3');
-    const goodSoundPool   = createSoundPool('sounds/good.mp3');   // ✅ 正確音效（檔名依你提供）
-    const badSoundPool   = createSoundPool('sounds/bad.mp3');   // ❌ 不健康
-    const wrongSoundPool = createSoundPool('sounds/wrong.mp3'); // ⚠️ 順序不對
+function handleClickFeedback() {
+  clickSoundPool.play();
+  if (navigator.vibrate) navigator.vibrate(80);
+}
 
-    // 🔇 預熱旗標（不再播放，只做預載 load）
-    let sfxWarmedUp = false;
-    function warmUpSoundPools() {
-      if (sfxWarmedUp) return;
-      sfxWarmedUp = true;
-      // 僅預載，不 play → 完全不會出聲
-      [clickSoundPool, goodSoundPool, badSoundPool, wrongSoundPool].forEach(p => p.preload());
-    }
+/* ================= 畫面切換 ================= */
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
 
-    function handleClickFeedback() {
-      // 若不希望按鈕有聲音，註解下一行
-      clickSoundPool.play();
-      if (navigator.vibrate) navigator.vibrate(80);
-    }
+/* ================= 遊戲核心 ================= */
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+const basket = { x: canvas.width/2 - 60, y: canvas.height-100, width:120, height:80 };
+let currentFood = null;
+let foodQueue = [], score = 0, level = 1;
+let stats = { 1: { good:0, bad:0 }, 2: { good:0, bad:0 }, 3: { good:0, bad:0 } };
+let bgTimeout = null;
 
-    // 初始化時就給正確大小
-    const basket = { 
-      x: canvas.width / 2 - 60, 
-      y: canvas.height - 100, 
-      width: 120,   // 和 drawImage 一致
-      height: 80    // 和碗圖一致
-    };
-    let currentFood = null;
-    let foodQueue = [], score = 0, level = 1;
-    let stats = { 1: { good: 0, bad: 0 }, 2: { good: 0, bad: 0 }, 3: { good: 0, bad: 0 } };
-    let bgTimeout = null;
-    const permissionTip = document.getElementById("permissionTip");
+const bgImages = { 0: new Image(), 1: new Image(), 2: new Image(), 3: new Image() };
+bgImages[0].src = "images/bg0.jpg";
+bgImages[1].src = "images/bg1.jpg";
+bgImages[2].src = "images/bg2.jpg";
+bgImages[3].src = "images/bg3.jpg";
+let bgImg = bgImages[0];
 
-    const bgImages = { 0: new Image(), 1: new Image(), 2: new Image(), 3: new Image() };
-    bgImages[0].src = "images/bg0.jpg";
-    bgImages[1].src = "images/bg1.jpg";
-    bgImages[2].src = "images/bg2.jpg";
-    bgImages[3].src = "images/bg3.jpg";
-    let bgImg = bgImages[0];
+const transitionScreens = { 1: "images/K2.jpg", 2: "images/K3.jpg" };
+const bowlImg = new Image(); bowlImg.src = 'images/bowl.png';
 
-    const transitionScreens = { 1: "images/K2.jpg", 2: "images/K3.jpg" };
-
-    const bowlImg = new Image();
-    bowlImg.src = 'images/bowl.png';
-
-    const allFoods = [
+ const allFoods = [
       { file: "GM1.png", type: "meat",       health: "good" },
       { file: "GM3.png", type: "meat",       health: "good" },
       { file: "GM4.png", type: "meat",       health: "good" },
@@ -232,58 +203,38 @@
       { file: "BStrach3.png", type: "rice",  health: "bad"  },
     ];
 
-    function showScreen(id) {
-      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-      document.getElementById(id).classList.add("active");
-    }
 
-function preloadAudio(audioList, callback) {
-  const total = audioList.length;
-  let loadedCount = 0;
-  const loadingText = document.getElementById("loadingText");
-  let finished = false;
-
-  function checkDone() {
-    if (finished) return;
-    loadedCount++;
-    loadingText.textContent = `載入中... ${loadedCount}/${total}`;
-    if (loadedCount >= total) {
-      finished = true;
-      callback();
+// === Intro 的允許方向按鈕 ===
+document.getElementById("allowOrientationBtn").onclick = async () => {
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function") {
+    try {
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res === "granted") {
+        window.addEventListener("deviceorientation", handleOrientation);
+        showScreen("K1Transition");
+      } else {
+        alert("未允許方向權限，遊戲可能無法操作");
+      }
+    } catch (err) {
+      alert("方向請求失敗：" + err);
     }
+  } else {
+    window.addEventListener("deviceorientation", handleOrientation);
+    showScreen("K1Transition");
   }
+};
 
-  audioList.forEach(audio => {
-    // 嘗試強制瀏覽器開始下載
-    try { audio.load(); } catch(e){}
-
-    // 我們不等 canplaythrough，直接給個最短延遲
-    setTimeout(checkDone, 50);
-  });
-
-  // 後備 timeout，避免萬一出現異常
-  setTimeout(() => {
-    if (!finished) {
-      console.warn("⚠️ 音效預載超時，直接進入遊戲");
-      finished = true;
-      callback();
-    }
-  }, 3000);
-}
-
-
+/* === StartGame === */
 function startGame() {
-  unlockAudioOnce(); //解鎖所有音效
-  showScreen("loading"); // 顯示 loading 畫面
+  unlockAudioOnce();
+  showScreen("loading");
   const loadingText = document.getElementById("loadingText");
   loadingText.textContent = "載入背景音樂中...";
 
-  // 只強制等 BGM，其他音效丟給 preload
   bgm.addEventListener("canplaythrough", () => {
-    console.log("🎵 BGM 已載入完成");
     loadingText.textContent = "載入完成，開始遊戲！";
 
-    // 預載其他音效（不影響流程）
     const allSfx = [
       ...clickSoundPool._all(),
       ...goodSoundPool._all(),
@@ -291,264 +242,53 @@ function startGame() {
       ...wrongSoundPool._all()
     ];
     allSfx.forEach(a => { try { a.load(); } catch(e){} });
-    warmUpSoundPools();
 
-    // ✅ 正式開始遊戲
-    showScreen("gameCanvasContainer");
-    requestDeviceOrientation();
-    level = 1;
-    score = 0;
-    prepareLevel();
-    loop();
-    bgm.play().catch(() => console.log("音樂播放失敗"));
+    setTimeout(() => {
+      showScreen("gameCanvasContainer");
+      level = 1;
+      score = 0;
+      prepareLevel();
+      loop();
+      bgm.play().catch(() => console.log("音樂播放失敗"));
+    }, 800);
   }, { once: true });
 
-  // 嘗試觸發 BGM 載入
   try { bgm.load(); } catch(e) {}
 }
 
-    function prepareLevel() {
-      foodQueue = [];
-      const correctFoods = allFoods.filter(f =>
-        (level === 1 && f.type === 'meat'      && f.health === 'good') ||
-        (level === 2 && f.type === 'vegetable' && f.health === 'good') ||
-        (level === 3 && f.type === 'rice'      && f.health === 'good')
-      );
-      const incorrectFoods = allFoods.filter(f => !correctFoods.includes(f));
-      for (let i = 0; i < 10; i++) {
-        foodQueue.push(correctFoods[Math.floor(Math.random() * correctFoods.length)]);
-        foodQueue.push(incorrectFoods[Math.floor(Math.random() * incorrectFoods.length)]);
-      }
-      spawnFood();
-      startLevelTimer();
+/* === 方向感應 === */
+function handleOrientation(event) {
+  const tilt = event.gamma;
+  if (tilt != null) {
+    basket.x += tilt * 0.5;
+    basket.x = Math.max(0, Math.min(canvas.width - basket.width, basket.x));
+  }
+}
+
+/* ========== 其他遊戲函數（簡化版） ========== */
+function prepareLevel(){ foodQueue = [allFoods[0], allFoods[1], allFoods[2]]; spawnFood(); }
+function spawnFood(){ if (foodQueue.length>0) { const f=foodQueue.shift(); const img=new Image(); img.onload=()=>{ currentFood={...f,image:img,x:100,y:0,size:80,speed:3}; }; img.src=`images/${f.file}`; } }
+function update(){ if(currentFood){ currentFood.y+=currentFood.speed; if(currentFood.y>canvas.height){ currentFood=null; spawnFood(); } } }
+function draw(){ ctx.clearRect(0,0,canvas.width,canvas.height); if(bgImg.complete) ctx.drawImage(bgImg,0,0,canvas.width,canvas.height); if(bowlImg.complete) ctx.drawImage(bowlImg,basket.x,basket.y,basket.width,basket.height); if(currentFood?.image?.complete) ctx.drawImage(currentFood.image,currentFood.x,currentFood.y,currentFood.size,currentFood.size); }
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+
+/* === 首次載入：Loading → Home === */
+window.addEventListener("load", () => {
+  const loadingText = document.getElementById("loadingText");
+  let loaded = 0;
+  const toLoad = [bgm, "images/cover.jpg", "images/intro.jpg", "images/K1.jpg"];
+  function checkDone() {
+    loaded++;
+    loadingText.textContent = `載入中... ${loaded}/${toLoad.length}`;
+    if (loaded >= toLoad.length) {
+      setTimeout(() => { showScreen("home"); }, 500);
     }
-
-    function spawnFood() {
-      if (currentFood || foodQueue.length === 0) return;
-      const f = foodQueue.shift();
-      const img = new Image();
-      img.onload = () => {
-        currentFood = {
-          ...f,
-          image: img,
-          x: Math.random() * (canvas.width - 80),
-          y: 0,
-          size: 90,
-          speed: 3
-        };
-      };
-      img.src = `images/${f.file}`;
-    }
-
-    // ===== 命中判定難度設定 =====
-    // 可選 'easy' | 'normal' | 'hard' | 'custom'
-    let hitboxDifficulty = 'hard';
-
-    const HITBOX_PRESETS = {
-      easy:   { shrinkX: 5,  verticalTolerance: 40 },
-      normal: { shrinkX: 15, verticalTolerance: 25 },
-      hard:   { shrinkX: 25, verticalTolerance: 15 },
-    };
-
-    const HITBOX_CUSTOM = { shrinkX: 20, verticalTolerance: 20 };
-
-    function getHitboxParams() {
-      if (hitboxDifficulty === 'custom') return HITBOX_CUSTOM;
-      return HITBOX_PRESETS[hitboxDifficulty] || HITBOX_PRESETS.normal;
-    }
-
-    // 縮小判定區域（左右收窄 + 垂直容差）
-    function isColliding(food, basket) {
-      const { shrinkX, verticalTolerance } = getHitboxParams();
-
-      const foodBottom = food.y + food.size;
-      const foodCenterX = food.x + food.size / 2;
-
-      const plateTop = basket.y;
-      const plateLeft = basket.x + shrinkX;
-      const plateRight = basket.x + basket.width - shrinkX;
-
-      return (
-        foodBottom >= plateTop &&
-        foodBottom <= plateTop + verticalTolerance &&
-        foodCenterX > plateLeft &&
-        foodCenterX < plateRight
-      );
-    }
-
-    function update() {
-      if (!currentFood) return;
-      currentFood.y += currentFood.speed;
-      const caught = isColliding(currentFood, basket);
-      const missed = currentFood.y > canvas.height;
-
-      if (caught || missed) {
-        if (caught) handleCatch(currentFood);
-        currentFood = null;
-        if (foodQueue.length > 0) spawnFood();
-        else showTransition();
-      }
-    }
-
-    // ✅ 每次接到食物都必定觸發音效（無全域冷卻）
-    function handleCatch(food) {
-      if (navigator.vibrate) navigator.vibrate(30);
-
-      if (food.health === 'bad') {
-        score -= 2;
-        stats[level].bad++;
-        bgImg = bgImages[3];
-        badSoundPool.play(1);          // ❌ 不健康 → 錯誤音
-      } else if (
-        (level === 1 && food.type === 'meat') ||
-        (level === 2 && food.type === 'vegetable') ||
-        (level === 3 && food.type === 'rice')
-      ) {
-        score += 2;
-        stats[level].good++;
-        bgImg = bgImages[1];
-        goodSoundPool.play(1);          // ✅ 本關健康目標 → 正確音（good.mp3）
-      } else {
-        score -= 1;
-        stats[level].bad++;
-        bgImg = bgImages[2];
-        wrongSoundPool.play(1);        // ⚠️ 健康但非目標 → 順序不對
-      }
-
-      if (bgTimeout) clearTimeout(bgTimeout);
-      bgTimeout = setTimeout(() => { bgImg = bgImages[0]; }, 3000);
-    }
-
-    let levelTime = 65;
-    let timeLeft = levelTime;
-    let timerInterval = null;
-
-     function getLevelTarget(level) {
-      if (level === 1) return "本關目標：只吃健康蛋白質";
-      if (level === 2) return "本關目標：只吃蔬菜";
-      if (level === 3) return "本關目標：只吃健康澱粉";
-      return "";
-    }
-
-    function draw() {
-      if (bgImg.complete) ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-      if (bowlImg.complete) ctx.drawImage(bowlImg, basket.x, basket.y, basket.width, basket.height);
-      if (currentFood?.image?.complete) ctx.drawImage(currentFood.image, currentFood.x, currentFood.y, currentFood.size, currentFood.size);
-      ctx.font = "bold 24px sans-serif";
-      ctx.fillStyle = "black";
-      ctx.fillText(`關卡 ${level} 分數:${score}`, 10, 40);
-      ctx.textAlign = "right";
-      ctx.fillText(`剩餘時間: ${timeLeft}s`, canvas.width - 10, 40);
-      ctx.textAlign = "left";
-      ctx.fillText(getLevelTarget(level), 10, 80);
-    }
-
-    function startLevelTimer() {
-      timeLeft = levelTime;
-      clearInterval(timerInterval);
-      timerInterval = setInterval(() => {
-        timeLeft--;
-        if (timeLeft <= 0) {
-          clearInterval(timerInterval);
-          showTransition();
-        }
-      }, 1000);
-    }
-
-    function loop() {
-      update();
-      draw();
-      if (level <= 3) requestAnimationFrame(loop);
-    }
-
-    function showTransition() {
-      clearInterval(timerInterval);
-      if (level < 3) {
-        document.getElementById("betweenLevel").style.backgroundImage = `url('${transitionScreens[level]}')`;
-        showScreen("betweenLevel");
-      } else showResult();
-    }
-
-    function nextLevelStart() {
-      level++;
-      showScreen("gameCanvasContainer");
-      prepareLevel();
-    }
-
-    function showResult() {
-      clearInterval(timerInterval);
-      showScreen("result");
-      const bg = score >= 20 ? "result1.jpg" : score >= 10 ? "result2.jpg" : "result3.jpg";
-      document.getElementById("result").style.backgroundImage = `url('images/${bg}')`;
-      document.getElementById("scoreResult").innerHTML = "";
-      setTimeout(() => {
-        document.getElementById("scoreResult").innerHTML = `
-          <div style="font-size: 60px; color: red; font-weight: bold; text-shadow: 2px 2px 4px white; margin-bottom: 100px;">
-            ${score} 分！
-          </div>`;
-      }, 800);
-    }
-
-    function requestDeviceOrientation() {
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        permissionTip.style.display = 'block';
-        DeviceOrientationEvent.requestPermission().then(res => {
-          if (res === 'granted') {
-            window.addEventListener("deviceorientation", handleOrientation);
-            permissionTip.style.display = 'none';
-          }
-        }).catch(() => permissionTip.textContent = "裝置方向權限未開啟");
-      } else window.addEventListener("deviceorientation", handleOrientation);
-    }
-
-    function handleOrientation(event) {
-      const tilt = event.gamma;
-      if (tilt != null) {
-        basket.x += tilt * 0.5;
-        basket.x = Math.max(0, Math.min(canvas.width - basket.width, basket.x));
-      }
-    }
-
-    window.onload = () => {
-      document.querySelectorAll('.hotspot').forEach(button => {
-        const original = button.onclick;
-        button.onclick = (e) => {
-          handleClickFeedback();   // 可能只在首頁/過場被點到
-          if (typeof original === 'function') original.call(button, e);
-        };
-      });
-    }
-
-// ===== 放在最下面 =====
-  window.addEventListener("load", () => {
-    const loadingText = document.getElementById("loadingText");
-
-    let loaded = 0;
-    const toLoad = [bgm, "images/cover.jpg", "images/intro.jpg", "images/K1.jpg"];
-
-    function checkDone() {
-      loaded++;
-      loadingText.textContent = `載入中... ${loaded}/${toLoad.length}`;
-      if (loaded >= toLoad.length) {
-        setTimeout(() => {
-          showScreen("home"); // ✅ 載完後切到首頁
-        }, 500);
-      }
-    }
-
-    bgm.addEventListener("canplaythrough", checkDone, { once: true });
-    try { bgm.load(); } catch(e) {}
-
-    toLoad.slice(1).forEach(src => {
-      const img = new Image();
-      img.onload = checkDone;
-      img.onerror = checkDone;
-      img.src = src;
-    });
-
-    showScreen("loading");
-  });
-  </script>
+  }
+  bgm.addEventListener("canplaythrough", checkDone, { once: true });
+  try { bgm.load(); } catch(e) {}
+  toLoad.slice(1).forEach(src => { const img=new Image(); img.onload=checkDone; img.onerror=checkDone; img.src=src; });
+  showScreen("loading");
+});
+</script>
 </body>
 </html>
-
