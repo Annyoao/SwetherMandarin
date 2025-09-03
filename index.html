@@ -133,42 +133,35 @@
         for (const a of pool) {
           if (a.paused || a.ended) return a;
         }
-        return pool[0]; // 全部在播時覆蓋第一個
+       return null;// 全部在播時覆蓋第一個
       }
 
-     async function safePlay(a, volume) {
-  try {
-    // 如果正在播放，不要強制中斷 → 直接建立新的 Audio
-    if (!a.paused && !a.ended) {
-      const clone = a.cloneNode();  // 複製一個新的音軌
-      clone.volume = volume;
-      clone.muted = false;
-      await clone.play();
-      return;
-    }
-
-    // 如果空閒才重置
-    a.currentTime = 0;
-    a.volume = volume;
-    a.muted = false;
-    await a.play();
-  } catch (err) {
-    console.warn("音效播放失敗:", err);
-  }
-}
-
+    async function safePlay(volume) {
+        let a = getIdleAudio();
+        if (!a) {
+          // ✅ 全部忙碌 → 直接複製一個新音軌，不覆蓋
+          a = new Audio(src);
+        }
+        try {
+          a.currentTime = 0;
+          a.volume = volume;
+          a.muted = false;
+          await a.play();
+        } catch (err) {
+          console.warn("音效播放失敗:", err);
+        }
+      }
       return {
         play(volume = 1) {
-          const a = getIdleAudio();
-          safePlay(a, volume);
+          safePlay(volume);
         },
-        // 僅供預載使用，不會播放
         preload() {
-          pool.forEach(a => { try { a.load(); } catch(e){} });
+          pool.forEach(a => { try { a.load(); } catch (e) {} });
         },
         _all() { return pool; }
       };
     }
+
 
     const clickSoundPool = createSoundPool('sounds/click.mp3');
     const goodSoundPool   = createSoundPool('sounds/good.mp3');   // ✅ 正確音效（檔名依你提供）
