@@ -54,15 +54,17 @@
     <div id="loadingText" style="font-size: 28px;">載入中...</div>
   </div>
 
-  <!-- ✅ 初始畫面顯示 home -->
+   <!-- 首頁 (封面) -->
   <div id="home" class="screen active" style="background-image: url('images/cover.jpg');">
     <div class="hotspot" onclick="showScreen('intro')"></div>
   </div>
-
-<div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
-      <div class="hotspot" onclick="startGame()"></div>
-</div>
-
+  
+  <!-- 提示頁 (intro) -->
+  <div id="intro" class="screen" style="background-image: url('images/intro.jpg');">
+    <div class="hotspot" onclick="showScreen('K1Transition')"></div>
+  </div>
+  
+  <!-- K1 過場 -->
   <div id="K1Transition" class="screen" style="background-image: url('images/K1.jpg');">
     <div class="hotspot" onclick="startGame()"></div>
   </div>
