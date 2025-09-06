@@ -227,11 +227,23 @@ function beginLoadingToGame(){
   const loadingText = document.getElementById('loadingText');
   loadingText.textContent = '載入背景音樂中...';
   // 等 BGM canplaythrough（若網速慢，loading 會顯示）
-  bgm.addEventListener('canplaythrough', () => {
+  bgm.addEventListener('canplaythrough',async  () => {
     loadingText.textContent = '載入完成，開始遊戲！';
     // 預載音效
     [clickSoundPool,goodSoundPool,badSoundPool,wrongSoundPool].forEach(p=>p.preload());
     warmUpSoundPools();
+    
+     // 嘗試播放音樂（必須要有使用者互動才能成功）236-245為保險機制:避免瀏覽器擋音樂
+    try {
+      await bgm.play();
+    } catch(e) {
+      console.log('bgm play failed, 等待使用者互動再播');
+      // 提示玩家點一下螢幕才能播音樂
+      document.body.addEventListener('click', () => {
+        bgm.play().catch(err=>console.log('still failed', err));
+      }, { once:true });
+    }
+    
     // 開始遊戲
     showScreen('gameCanvasContainer');
     level = 1; score = 0;
