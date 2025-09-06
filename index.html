@@ -85,15 +85,18 @@
     <div id="scoreResult"></div>
     <div class="hotspot" onclick="location.reload()"></div>
   </div>
-
 <script>
-/* --- 音樂、音效池（保留你原本的實作，可按需修改） --- */
-const bgm = new Audio('sounds/bgm.mp3'); bgm.loop = true; bgm.volume = 0.1;
+// ========= 音訊：BGM（HTMLAudio） + SFX（WebAudio） =========
+const bgm = new Audio('sounds/bgm.mp3');
+bgm.loop = true;
+bgm.volume = 0.1;
+bgm.preload = 'auto';
+
 let audioUnlocked = false;
 async function unlockAudioOnce(){
-  if(audioUnlocked) return;
+  if (audioUnlocked) return;
   audioUnlocked = true;
-  try {
+  try{
     const AC = window.AudioContext || window.webkitAudioContext;
     if(!AC) return;
     const ctx = new AC();
@@ -101,33 +104,52 @@ async function unlockAudioOnce(){
     const buffer = ctx.createBuffer(1,1,22050);
     const src = ctx.createBufferSource();
     src.buffer = buffer; src.connect(ctx.destination); src.start(0);
-    setTimeout(()=>{ try{ ctx.close(); } catch(e){} }, 120);
-  } catch(e){ console.log('unlockAudioOnce fail', e); }
+    setTimeout(()=>{ try{ ctx.close(); }catch{} }, 120);
+  }catch(e){ console.log('unlockAudioOnce fail', e); }
 }
 
-function createSoundPool(src, poolSize=6){
-  const pool = Array.from({length:poolSize}, ()=> { const a=new Audio(src); a.preload='auto'; return a; });
-  function getIdleAudio(){
-    for(const a of pool) if(a.paused || a.ended) return a;
-    return null;
-  }
-  async function safePlay(volume){
-    let a = getIdleAudio();
-    if(!a) a = new Audio(src); // 全忙就 clone 新音軌
-    try{ a.currentTime = 0; a.volume = volume; a.muted=false; await a.play(); } catch(e){ console.warn('sfx fail', e); }
-  }
-  return { play(vol=1){ safePlay(vol); }, preload(){ pool.forEach(a=>{try{a.load()}catch(e){} }); }, _all(){ return pool; } };
+// --- Web Audio: SFX ---
+let actx = null, sfx = {}, sfxReady = false;
+async function initSfxOnce(){
+  if (sfxReady) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  actx = actx || new AC();
+  await actx.resume();
+
+  const files = {
+    click: 'sounds/click.mp3',
+    good : 'sounds/good.mp3',
+    bad  : 'sounds/bad.mp3',
+    wrong: 'sounds/wrong.mp3'
+  };
+
+  // 輕量並行載入＋解碼
+  await Promise.all(Object.entries(files).map(async ([key, url])=>{
+    const arr = await fetch(url).then(r=>r.arrayBuffer());
+    sfx[key] = await new Promise((res, rej)=> actx.decodeAudioData(arr, res, rej));
+  }));
+
+  sfxReady = true;
 }
 
-const clickSoundPool = createSoundPool('sounds/click.mp3');
-const goodSoundPool = createSoundPool('sounds/good.mp3');
-const badSoundPool = createSoundPool('sounds/bad.mp3');
-const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
+function playSfx(name, vol=1){
+  if (!actx || !sfx[name]) return;
+  try{
+    const src = actx.createBufferSource();
+    src.buffer = sfx[name];
+    const gain = actx.createGain();
+    gain.gain.value = vol;
+    src.connect(gain).connect(actx.destination);
+    src.start(0);
+  }catch(e){ console.warn('sfx play err', e); }
+}
 
-function warmUpSoundPools(){ [clickSoundPool,goodSoundPool,badSoundPool,wrongSoundPool].forEach(p=>p.preload()); }
-function handleClickFeedback(){ clickSoundPool.play(); if(navigator.vibrate) navigator.vibrate(80); }
+function ensureAudioInitOnGesture(){
+  unlockAudioOnce();
+  initSfxOnce().catch(console.warn);
+}
 
-/* --- 畫布與遊戲變數 --- */
+// ========= 遊戲畫面 / 狀態 =========
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth; canvas.height = window.innerHeight;
@@ -136,7 +158,7 @@ const basket = { x: canvas.width/2 - 60, y: canvas.height - 100, width: 120, hei
 let currentFood = null, foodQueue = [], score = 0, level = 1;
 let stats = {1:{good:0,bad:0},2:{good:0,bad:0},3:{good:0,bad:0}};
 let bgTimeout = null;
-let orientationAllowed = false; // <- 記錄是否已由按鈕授權過
+let orientationAllowed = false;
 
 const bgImages = { 0:new Image(),1:new Image(),2:new Image(),3:new Image() };
 bgImages[0].src = 'images/bg0.jpg'; bgImages[1].src = 'images/bg1.jpg'; bgImages[2].src = 'images/bg2.jpg'; bgImages[3].src = 'images/bg3.jpg';
@@ -163,25 +185,26 @@ const allFoods = [
   { file:"BStrach3.png", type:"rice", health:"bad" },
 ];
 
-/* --- 畫面切換 helper --- */
+// ========= 畫面切換 =========
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   const el = document.getElementById(id);
-  if(el) el.classList.add('active');
+  if (el) el.classList.add('active');
 }
 
-/* --- 允許按鈕 的行為（關鍵）--- */
+// ========= 允許裝置方向 =========
 const allowBtn = document.getElementById('allowOrientationBtn');
-allowBtn.addEventListener('click', async (e) => {
-  handleClickFeedback(); // 音效 + 震動（使用者手勢）
-  // iOS 要求 requestPermission() 必須在使用者操作中呼叫
+allowBtn.addEventListener('click', async () => {
+  // 在用戶手勢中解鎖/初始化音訊
+  ensureAudioInitOnGesture();
+  playSfx('click'); if(navigator.vibrate) navigator.vibrate(80);
+
   if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     try {
       const res = await DeviceOrientationEvent.requestPermission();
       if (res === 'granted') {
         orientationAllowed = true;
         window.addEventListener('deviceorientation', handleOrientation);
-        // 進入 K1 過場（按鈕授權成功後）
         showScreen('K1Transition');
       } else {
         alert('您未允許裝置方向存取，請開啟權限後再試。');
@@ -191,77 +214,102 @@ allowBtn.addEventListener('click', async (e) => {
       alert('授權失敗或被拒。');
     }
   } else {
-    // Android / 桌面：不需要 requestPermission，直接綁事件
     orientationAllowed = true;
     window.addEventListener('deviceorientation', handleOrientation);
     showScreen('K1Transition');
   }
 });
 
-/* --- startGame：從 K1 過場按下 start 才會真正進入 loading 並啟動遊戲 --- */
+// ========= 開始遊戲（從 K1） =========
 function startGame(){
-  // 若沒有事先授權（理想流程：玩家先按 allow），在這裡我們也可嘗試再次請求（此 click 也是使用者手勢）
+  ensureAudioInitOnGesture();
   if(!orientationAllowed && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
-    // 嘗試直接請求（會在 iOS 彈出）
     DeviceOrientationEvent.requestPermission().then(res=>{
       if(res === 'granted'){ orientationAllowed = true; window.addEventListener('deviceorientation', handleOrientation); }
-      // 不論是否同意，我們繼續 loading → game，但強烈建議玩家事先點允許
       beginLoadingToGame();
-    }).catch(err=>{
-      console.warn('requestPermission in startGame failed', err);
-      beginLoadingToGame();
-    });
+    }).catch(()=> beginLoadingToGame());
   } else {
     beginLoadingToGame();
   }
 }
 
+// ========= 載入 → 進遊戲，BGM 播放保險 =========
 function beginLoadingToGame(){
   unlockAudioOnce();
   showScreen('loading');
   const loadingText = document.getElementById('loadingText');
   loadingText.textContent = '載入背景音樂中...';
-  // 等 BGM canplaythrough（若網速慢，loading 會顯示）
-  bgm.addEventListener('canplaythrough', () => {
+
+  let started = false;
+  const startNow = () => {
+    if (started) return;
+    started = true;
+
     loadingText.textContent = '載入完成，開始遊戲！';
-    // 預載音效
-    [clickSoundPool,goodSoundPool,badSoundPool,wrongSoundPool].forEach(p=>p.preload());
-    warmUpSoundPools();
-    // 開始遊戲
+
+    // 進入遊戲
     showScreen('gameCanvasContainer');
     level = 1; score = 0;
     prepareLevel(); loop();
-    bgm.play().catch(()=>console.log('bgm play failed'));
-  }, { once: true });
-  try{ bgm.load(); } catch(e){}
+
+    // 嘗試播放 BGM；若被擋，下一次點擊再播
+    bgm.play().catch(()=>{
+      const one = () => { bgm.play().catch(()=>{}); document.removeEventListener('pointerdown', one); };
+      document.addEventListener('pointerdown', one, { once:true });
+    });
+  };
+
+  bgm.addEventListener('canplaythrough', startNow, { once:true });
+  // 防呆：最多等 1500ms 就先進遊戲，音樂稍後補播
+  setTimeout(startNow, 1500);
+
+  try{ bgm.load(); }catch{}
 }
 
-/* --- level / spawn / 判定 / audio on catch --- */
+// ========= 關卡 / 掉落 / 判定 =========
 function prepareLevel(){
   foodQueue = [];
-  const correctFoods = allFoods.filter(f => (level===1 && f.type==='meat' && f.health==='good') || (level===2 && f.type==='vegetable' && f.health==='good') || (level===3 && f.type==='rice' && f.health==='good'));
+  const correctFoods = allFoods.filter(f =>
+    (level===1 && f.type==='meat'       && f.health==='good') ||
+    (level===2 && f.type==='vegetable'  && f.health==='good') ||
+    (level===3 && f.type==='rice'       && f.health==='good')
+  );
   const incorrectFoods = allFoods.filter(f => !correctFoods.includes(f));
-  for(let i=0;i<10;i++){ foodQueue.push(correctFoods[Math.floor(Math.random()*correctFoods.length)]); foodQueue.push(incorrectFoods[Math.floor(Math.random()*incorrectFoods.length)]); }
-  spawnFood(); startLevelTimer();
+
+  for(let i=0;i<10;i++){
+    foodQueue.push(correctFoods[Math.floor(Math.random()*correctFoods.length)]);
+    foodQueue.push(incorrectFoods[Math.floor(Math.random()*incorrectFoods.length)]);
+  }
+  spawnFood();
+  startLevelTimer();
 }
+
 function spawnFood(){
   if(currentFood || foodQueue.length===0) return;
   const f = foodQueue.shift();
   const img = new Image();
-  img.onload = ()=>{ currentFood = {...f, image: img, x: Math.random()*(canvas.width-80), y:0, size:90, speed:3 }; };
+  img.onload = ()=>{
+    currentFood = { ...f, image: img, x: Math.random()*(canvas.width-80), y:0, size:90, speed:3 };
+  };
   img.src = `images/${f.file}`;
 }
+
 let hitboxDifficulty = 'hard';
 const HITBOX_PRESETS = { easy:{shrinkX:5,verticalTolerance:40}, normal:{shrinkX:15,verticalTolerance:25}, hard:{shrinkX:25,verticalTolerance:15} };
 const HITBOX_CUSTOM = { shrinkX:20, verticalTolerance:20 };
 function getHitboxParams(){ if(hitboxDifficulty==='custom') return HITBOX_CUSTOM; return HITBOX_PRESETS[hitboxDifficulty]||HITBOX_PRESETS.normal; }
+
 function isColliding(food,basket){
   const { shrinkX, verticalTolerance } = getHitboxParams();
   const foodBottom = food.y + food.size;
   const foodCenterX = food.x + food.size/2;
-  const plateTop = basket.y; const plateLeft = basket.x + shrinkX; const plateRight = basket.x + basket.width - shrinkX;
-  return (foodBottom >= plateTop && foodBottom <= plateTop + verticalTolerance && foodCenterX > plateLeft && foodCenterX < plateRight);
+  const plateTop = basket.y;
+  const plateLeft = basket.x + shrinkX;
+  const plateRight = basket.x + basket.width - shrinkX;
+  return (foodBottom >= plateTop && foodBottom <= plateTop + verticalTolerance &&
+          foodCenterX > plateLeft && foodCenterX < plateRight);
 }
+
 function update(){
   if(!currentFood) return;
   currentFood.y += currentFood.speed;
@@ -273,54 +321,107 @@ function update(){
     if(foodQueue.length>0) spawnFood(); else showTransition();
   }
 }
+
 function handleCatch(food){
   if(navigator.vibrate) navigator.vibrate(30);
-  if(food.health === 'bad'){ score -= 2; stats[level].bad++; bgImg = bgImages[3]; badSoundPool.play(); }
-  else if( (level===1 && food.type==='meat') || (level===2 && food.type==='vegetable') || (level===3 && food.type==='rice') ){ score += 2; stats[level].good++; bgImg = bgImages[1]; goodSoundPool.play(); }
-  else { score -= 1; stats[level].bad++; bgImg = bgImages[2]; wrongSoundPool.play(); }
-  if(bgTimeout) clearTimeout(bgTimeout); bgTimeout = setTimeout(()=>{ bgImg = bgImages[0]; }, 3000);
+  if(food.health === 'bad'){
+    score -= 2; stats[level].bad++; bgImg = bgImages[3]; playSfx('bad');
+  } else if( (level===1 && food.type==='meat') ||
+             (level===2 && food.type==='vegetable') ||
+             (level===3 && food.type==='rice') ){
+    score += 2; stats[level].good++; bgImg = bgImages[1]; playSfx('good');
+  } else {
+    score -= 1; stats[level].bad++; bgImg = bgImages[2]; playSfx('wrong');
+  }
+  if(bgTimeout) clearTimeout(bgTimeout);
+  bgTimeout = setTimeout(()=>{ bgImg = bgImages[0]; }, 3000);
 }
 
-/* --- 計時、繪製、主迴圈 --- */
+// ========= 計時 / 繪製 / 迴圈 =========
 let levelTime = 65, timeLeft = levelTime, timerInterval = null;
-function startLevelTimer(){ timeLeft = levelTime; clearInterval(timerInterval); timerInterval = setInterval(()=>{ timeLeft--; if(timeLeft<=0){ clearInterval(timerInterval); showTransition(); } }, 1000); }
+function startLevelTimer(){
+  timeLeft = levelTime;
+  clearInterval(timerInterval);
+  timerInterval = setInterval(()=>{
+    timeLeft--;
+    if(timeLeft<=0){ clearInterval(timerInterval); showTransition(); }
+  }, 1000);
+}
+
 function draw(){
   if(bgImg.complete) ctx.drawImage(bgImg,0,0,canvas.width,canvas.height);
   if(bowlImg.complete) ctx.drawImage(bowlImg, basket.x, basket.y, basket.width, basket.height);
   if(currentFood?.image?.complete) ctx.drawImage(currentFood.image, currentFood.x, currentFood.y, currentFood.size, currentFood.size);
+
   ctx.font = "bold 24px sans-serif"; ctx.fillStyle = "black";
   ctx.fillText(`關卡 ${level} 分數:${score}`, 10, 40);
   ctx.textAlign = "right"; ctx.fillText(`剩餘時間: ${timeLeft}s`, canvas.width - 10, 40); ctx.textAlign = "left";
   ctx.fillText(getLevelTarget(level), 10, 80);
 }
-function getLevelTarget(l){ if(l===1) return "本關目標：只吃健康蛋白質"; if(l===2) return "本關目標：只吃蔬菜"; if(l===3) return "本關目標：只吃健康澱粉"; return ""; }
-function loop(){ update(); draw(); if(level<=3) requestAnimationFrame(loop); }
-function showTransition(){ clearInterval(timerInterval); if(level<3){ document.getElementById('betweenLevel').style.backgroundImage = `url('${transitionScreens[level]}')`; showScreen('betweenLevel'); } else showResult(); }
-function nextLevelStart(){ level++; showScreen('gameCanvasContainer'); prepareLevel(); }
-function showResult(){ clearInterval(timerInterval); showScreen('result'); const bg = score>=20 ? 'result1.jpg' : score>=10 ? 'result2.jpg' : 'result3.jpg'; document.getElementById('result').style.backgroundImage = `url('images/${bg}')`; document.getElementById('scoreResult').innerHTML = ''; setTimeout(()=>{ document.getElementById('scoreResult').innerHTML = `<div style="font-size:60px;color:red;font-weight:bold;text-shadow:2px 2px 4px white;margin-bottom:100px;">${score} 分！</div>`; }, 800); }
-
-/* --- 裝置方向處理 --- */
-function handleOrientation(ev){
-  const tilt = ev.gamma;
-  if(tilt != null){ basket.x += tilt * 0.5; basket.x = Math.max(0, Math.min(canvas.width - basket.width, basket.x)); }
+function getLevelTarget(l){
+  if(l===1) return "本關目標：只吃健康蛋白質";
+  if(l===2) return "本關目標：只吃蔬菜";
+  if(l===3) return "本關目標：只吃健康澱粉";
+  return "";
 }
 
-/* --- 頁面按鈕包裹的 click 聲音處理（hotspot 加強） --- */
+function loop(){ update(); draw(); if(level<=3) requestAnimationFrame(loop); }
+
+function showTransition(){
+  clearInterval(timerInterval);
+  if(level<3){
+    document.getElementById('betweenLevel').style.backgroundImage = `url('${transitionScreens[level]}')`;
+    showScreen('betweenLevel');
+  } else showResult();
+}
+function nextLevelStart(){ level++; showScreen('gameCanvasContainer'); prepareLevel(); }
+function showResult(){
+  clearInterval(timerInterval);
+  showScreen('result');
+  const bg = score>=20 ? 'result1.jpg' : score>=10 ? 'result2.jpg' : 'result3.jpg';
+  document.getElementById('result').style.backgroundImage = `url('images/${bg}')`;
+  document.getElementById('scoreResult').innerHTML = '';
+  setTimeout(()=>{ document.getElementById('scoreResult').innerHTML =
+    `<div style="font-size:60px;color:red;font-weight:bold;text-shadow:2px 2px 4px white;margin-bottom:100px;">${score} 分！</div>`;
+  }, 800);
+}
+
+// ========= 裝置方向 =========
+function handleOrientation(ev){
+  const tilt = ev.gamma;
+  if(tilt != null){
+    basket.x += tilt * 0.5;
+    basket.x = Math.max(0, Math.min(canvas.width - basket.width, basket.x));
+  }
+}
+
+// ========= hotspot 統一處理：先解鎖/初始化音訊，再觸發原邏輯 =========
 window.onload = () => {
   document.querySelectorAll('.hotspot').forEach(button=>{
     const original = button.onclick;
-    button.onclick = (e) => { handleClickFeedback(); if(typeof original === 'function') original.call(button, e); };
+    button.onclick = (e) => {
+      ensureAudioInitOnGesture();
+      playSfx('click'); if(navigator.vibrate) navigator.vibrate(80);
+      if (typeof original === 'function') original.call(button, e);
+    };
   });
 };
 
-/* --- preload: 載入必要資源，載完顯示 home --- */
+// ========= 初次載入：預載封面，載好後進 home =========
 window.addEventListener('load', ()=>{
   const loadingText = document.getElementById('loadingText');
   let loaded = 0;
-  const toLoad = [bgm, 'images/cover.jpg', 'images/intro.jpg', 'images/K1.jpg'];
-  function checkDone(){ loaded++; loadingText.textContent = `載入中... ${loaded}/${toLoad.length}`; if(loaded >= toLoad.length){ setTimeout(()=> showScreen('home'), 500); } }
-  bgm.addEventListener('canplaythrough', checkDone, { once:true }); try{ bgm.load(); } catch(e){}
-  toLoad.slice(1).forEach(src => { const img=new Image(); img.onload=checkDone; img.onerror=checkDone; img.src=src; });
+  const imgs = ['images/cover.jpg', 'images/intro.jpg', 'images/K1.jpg'];
+  function checkDone(){
+    loaded++;
+    loadingText.textContent = `載入中... ${loaded}/${imgs.length + 1}`;
+    if(loaded >= imgs.length + 1){
+      setTimeout(()=> showScreen('home'), 300);
+    }
+  }
+  bgm.addEventListener('canplaythrough', checkDone, { once:true });
+  try{ bgm.load(); }catch{}
+  imgs.forEach(src => { const img=new Image(); img.onload=checkDone; img.onerror=checkDone; img.src=src; });
   showScreen('loading');
 });
 </script>
