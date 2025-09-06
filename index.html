@@ -162,7 +162,13 @@ const allFoods = [
   { file:"BStrach2.png", type:"rice", health:"bad" },
   { file:"BStrach3.png", type:"rice", health:"bad" },
 ];
-
+// 預載所有食物圖片，避免 onload 沒觸發
+allFoods.forEach(f => {
+  const img = new Image();
+  img.src = `images/${f.file}`;
+  f.preloadedImage = img; // 把圖片存到物件裡
+});
+  
 /* --- 畫面切換 helper --- */
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -247,10 +253,16 @@ function prepareLevel(){
 function spawnFood(){
   if(currentFood || foodQueue.length===0) return;
   const f = foodQueue.shift();
-  const img = new Image();
-  img.onload = ()=>{ currentFood = {...f, image: img, x: Math.random()*(canvas.width-80), y:0, size:90, speed:3 }; };
-  img.src = `images/${f.file}`;
+  currentFood = {
+    ...f,
+    image: f.preloadedImage,  // ✅ 直接用預載好的圖片
+    x: Math.random() * (canvas.width - 80),
+    y: 0,
+    size: 90,
+    speed: 3
+  };
 }
+
 let hitboxDifficulty = 'hard';
 const HITBOX_PRESETS = { easy:{shrinkX:5,verticalTolerance:40}, normal:{shrinkX:15,verticalTolerance:25}, hard:{shrinkX:25,verticalTolerance:15} };
 const HITBOX_CUSTOM = { shrinkX:20, verticalTolerance:20 };
