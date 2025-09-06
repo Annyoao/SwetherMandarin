@@ -120,9 +120,9 @@ function createSoundPool(src, poolSize=6){
 }
 
 const clickSoundPool = createSoundPool('sounds/click.mp3');
-const goodSoundPool = createSoundPool('sounds/good.mp3');
-const badSoundPool = createSoundPool('sounds/bad.mp3');
-const wrongSoundPool = createSoundPool('sounds/wrong.mp3');
+const goodSoundPool = createSoundPool('sounds/good.mp3',10);
+const badSoundPool = createSoundPool('sounds/bad.mp3',8);
+const wrongSoundPool = createSoundPool('sounds/wrong.mp3',6);
 
 function warmUpSoundPools(){ [clickSoundPool,goodSoundPool,badSoundPool,wrongSoundPool].forEach(p=>p.preload()); }
 function handleClickFeedback(){ clickSoundPool.play(); if(navigator.vibrate) navigator.vibrate(80); }
