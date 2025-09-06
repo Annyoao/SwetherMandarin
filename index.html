@@ -231,7 +231,7 @@ function beginLoadingToGame(){
     loadingText.textContent = '載入完成，開始遊戲！';
     // 預載音效
     [clickSoundPool,goodSoundPool,badSoundPool,wrongSoundPool].forEach(p=>p.preload());
-    warmUpSoundPools();
+     pool.play(0);
     
      // 嘗試播放音樂（必須要有使用者互動才能成功）236-245為保險機制:避免瀏覽器擋音樂
     try {
