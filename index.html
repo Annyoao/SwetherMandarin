@@ -294,7 +294,7 @@ function spawnFood(){
   img.src = `images/${f.file}`;
 }
 
-let hitboxDifficulty = 'hard';
+let hitboxDifficulty = 'normal';
 const HITBOX_PRESETS = { easy:{shrinkX:5,verticalTolerance:40}, normal:{shrinkX:15,verticalTolerance:25}, hard:{shrinkX:25,verticalTolerance:15} };
 const HITBOX_CUSTOM = { shrinkX:20, verticalTolerance:20 };
 function getHitboxParams(){ if(hitboxDifficulty==='custom') return HITBOX_CUSTOM; return HITBOX_PRESETS[hitboxDifficulty]||HITBOX_PRESETS.normal; }
